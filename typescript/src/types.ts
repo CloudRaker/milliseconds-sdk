@@ -212,7 +212,10 @@ export interface VerifyResult {
 
 // ---- extraction ----------------------------------------------------------
 
-export type JsonSchema = { readonly type?: string; readonly [k: string]: unknown }
+export type JsonSchema = {
+  readonly type?: string | readonly string[]
+  readonly [k: string]: unknown
+}
 
 /** A Standard Schema object: zod 4, valibot 1.1+, arktype. */
 export interface StandardSchemaV1<Output = unknown> {

@@ -164,9 +164,9 @@ const data = await dm.extract(pdfText, typed<z.infer<typeof Invoice>>(z.toJSONSc
 // data.total: number | null
 ```
 
-zod 4.1 and later give every schema its own `toJSONSchema()` method, so
+zod 4.2 and later give every schema its own `toJSONSchema()` method, so
 `dm.extract(pdfText, Invoice)` works too and infers the same type. `typed<>` stays right for
-valibot, and for zod 4.0, where the converter is a module function.
+valibot and older zod, where the converter is a module function.
 
 An arktype schema passes straight in: `dm.extract(text, Invoice)`. The SDK calls its
 `toJsonSchema()` and reads the output type from `~standard`.

@@ -7,7 +7,7 @@ import type { ExtractSchema, JsonSchema, Typed } from './types'
  *
  * `dm.extract(text, typed<z.infer<typeof S>>(z.toJSONSchema(S)))`
  */
-export const typed = <T>(schema: JsonSchema): Typed<T> => schema as Typed<T>
+export const typed = <T>(schema: object): Typed<T> => schema as Typed<T>
 
 const CONVERT =
   'Pass a JSON Schema. zod: typed<z.infer<typeof S>>(z.toJSONSchema(S)). valibot: typed<v.InferOutput<typeof S>>(toJsonSchema(S)). arktype works directly.'

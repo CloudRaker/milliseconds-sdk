@@ -33,13 +33,13 @@ LABELS: Final[Mapping[Intent, str]] = {
     "account": "login, passwords and profile settings",
 }
 
-dm = DecisionMachine()                         # reads MS_API_KEY
+dm = DecisionMachine()  # reads MS_API_KEY
 
 r = dm.classify("I was charged twice.", LABELS)
-r.label                                        # Intent. A match statement over it is exhaustive.
-r.scores["billing"]                            # ok. r.scores["refunds"] is a type error.
-r.probability                                  # float
-r.confidence                                   # float. 1 = one clear winner, 0 = flat.
+r.label  # Intent. A match statement over it is exhaustive.
+r.scores["billing"]  # ok. r.scores["refunds"] is a type error.
+r.probability  # float
+r.confidence  # float. 1 = one clear winner, 0 = flat.
 ```
 
 Without the annotation you get `ClassifyResult[str]`. Nothing breaks. You lose only the
@@ -57,8 +57,8 @@ statement = dm.yes_no(
     "The customer expresses urgency.",
     when_true="Time pressure, ASAP, losing money",
 )
-statement.answer                               # bool
-statement.probability                          # float
+statement.answer  # bool
+statement.probability  # float
 
 label = dm.classify("I was charged twice.", LABELS)
 
@@ -75,15 +75,15 @@ tree = dm.classify_tree(
         "shipping": "delivery, tracking, lost or damaged parcels",
     },
 )
-tree.path                                      # winning label per level, top to bottom
-tree.label                                     # the deepest label
+tree.path  # winning label per level, top to bottom
+tree.label  # the deepest label
 
 mood = dm.rate(
     "I am done with this company.",
     ["Calm", "Annoyed", "Angry", "Threatening to leave"],
 )
-mood.score                                     # 0 to len(scale) - 1. Route on this.
-mood.level                                     # the most likely index. It flips on 0.001.
+mood.score  # 0 to len(scale) - 1. Route on this.
+mood.level  # the most likely index. It flips on 0.001.
 
 who = dm.answer("Apple announced the M5 today.", "Who announced the product?")
 if who.span is not None:
@@ -93,8 +93,8 @@ people = dm.entities("Ada met Grace in Paris.", {"person": "a human name", "plac
 [e.text for e in people]
 
 check = dm.verify("Invoice 4471, total 120.00 EUR.", "invoice_number", 4471)
-check.matches                                  # bool
-check.found                                    # what the text actually says
+check.matches  # bool
+check.found  # what the text actually says
 ```
 
 Describe every label. The label text is the instruction, and the model reads it literally.
@@ -130,12 +130,12 @@ Pass a list of texts for a batch. The reply follows your request, never the othe
 ```python
 tickets = ["I was charged twice.", "Where is my parcel?"]
 
-many = dm.classify(tickets, LABELS)            # Results[ClassifyResult[Intent]]
+many = dm.classify(tickets, LABELS)  # Results[ClassifyResult[Intent]]
 many[0].label
-many.usage.input_tokens                        # the usage of the one call
+many.usage.input_tokens  # the usage of the one call
 
 grid = dm.yes_no(tickets, ["The text mentions a price.", "The customer is angry."])
-grid[0][1].answer                              # text 0, statement 1
+grid[0][1].answer  # text 0, statement 1
 ```
 
 The limits are 32 texts per call, and 20,000 characters per text. The SDK never splits a
@@ -160,7 +160,7 @@ class Invoice(TypedDict):
 
 
 data = dm.extract("Invoice 4471, total 120.00 EUR.", Invoice)
-data["total"]                                  # float | None
+data["total"]  # float | None
 ```
 
 A plain dict carries descriptions, which raise accuracy:
@@ -193,14 +193,14 @@ usage. Send a one-text batch to reach it: `dm.extract([text], Invoice).usage`.
 ```python
 r = dm.classify("I was charged twice.", LABELS)
 r.usage.input_chars
-r.usage.input_tokens                           # what this call bills
-r.usage.inference_ms                           # model time, not wall clock
-r.usage.headers["x-input-tokens"]              # every response header stays reachable
+r.usage.input_tokens  # what this call bills
+r.usage.inference_ms  # model time, not wall clock
+r.usage.headers["x-input-tokens"]  # every response header stays reachable
 
-limits = r.usage.rate_limit                    # RateLimit | None
+limits = r.usage.rate_limit  # RateLimit | None
 if limits is not None:
     limits.remaining_requests
-    limits.reset_requests                      # '5m0s'
+    limits.reset_requests  # '5m0s'
 ```
 
 The rate-limit numbers come from the previous request at that Cloudflare colo. The server
@@ -243,8 +243,8 @@ Some checks run before any HTTP call. They raise `InvalidRequestError` with code
 try:
     dm.classify("I was charged twice.", ["billing"])
 except InvalidRequestError as e:
-    print(e.code)                              # client_error
-    print(e.api_message)                       # labels has 1 entry. classify needs 2 to 64.
+    print(e.code)  # client_error
+    print(e.api_message)  # labels has 1 entry. classify needs 2 to 64.
 ```
 
 ## What the SDK changes, and nothing else

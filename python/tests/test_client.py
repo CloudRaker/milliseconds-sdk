@@ -43,6 +43,7 @@ class Node(TypedDict):
     name: str | None
     parent: Node | None
 
+
 def body_of(request: httpx.Request) -> dict[str, Any]:
     return json.loads(request.content)
 

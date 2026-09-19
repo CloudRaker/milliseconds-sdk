@@ -69,7 +69,7 @@ OpenAPI document.
 | `planFor` never reads `schema.required`. | `lib/json-schema.ts` | `required` is sent and changes no type. |
 | `labels` is `.min(2).max(64)`. `types` (entities) is `.min(1).max(64)`. `scale` is `.min(2).max(10)`. | `decide.schema.ts` | Three different client-side checks. One rule would be wrong. |
 | `texts`, `statements` and `questions` are each `.min(1).max(32)`. Each text is `.max(20_000)`. | `decide.schema.ts` | Empty array and over-limit are client-side errors. |
-| `YesNoRequest` refines `statement`/`statements` only. It has no `oneText` refine. | `decide.schema.ts` | `yes-no` accepts a body with neither `statement` nor `statements` and answers `200` with `{"results":[]}`. |
+| `YesNoRequest` and `AnswerRequest` refine their own plural pair only. Neither has the `oneText` refine. | `decide.schema.ts` | `yes-no` and `answer` accept a body with no `text` and answer `200` with `{"results":[]}`. A missing statement or question is a normal 400. The SDK rejects an empty text client-side. |
 | `oneText` returns false when you send neither, and the message is the fixed string `provide text or texts, not both`. | `decide.schema.ts` | The wire message misleads. The SDK must beat it. |
 | `classify-tree` sums `inference_ms` over every level into the header, while `x-input-chars` stays one pass over the body. | `decide.routes.ts` | The per-level numbers do not sum to the header. Say so in the doc comment. |
 | `retry-after` is set only on `429 rate_limit_exceeded`. | `api-key.middleware.ts` `refuse()` | `retryAfter` is null on `insufficient_quota`. |
@@ -534,6 +534,7 @@ One function. Every method is two lines on top of it.
 
 ```ts
 const RETRY = new Set(['rate_limit_exceeded', 'runner_error', 'overloaded', 'connection_error', 'timeout'])
+// A 429, 502 or 529 whose body is not the JSON envelope (a Cloudflare edge page) maps by status, so it retries too.
 const backoff = (n: number) => Math.random() * Math.min(500 * 2 ** n, 8_000)  // full jitter
 ```
 
@@ -1058,7 +1059,9 @@ documented API trap.
 | an empty input array | `texts is empty. Send at least one text.` |
 | over 32 texts | `texts has 41 items. The limit is 32. Split the batch.` |
 | a text over 20,000 characters | `texts[3] is 24,110 characters. The limit is 20,000. Split on paragraphs and send the parts as texts.` |
-| `yes-no` with no statement | `yes-no needs a statement. The API answers 200 with {"results":[]} for a body without one.` |
+| an empty text, or an empty element in texts | `text is empty. Send at least one character.` / `texts[1] is empty. Send at least one character.` |
+| `yes-no` with no statement | `yes-no needs a statement. The wire message for a body without one names both fields and misleads.` |
+| a bare string where a list belongs (Python) | `labels must be a list or a dict, not a str.` |
 | an empty statements or questions array, or over 32 | `statements has 0 items. Send 1 to 32.` |
 | fewer than 2 or more than 64 labels | `labels has 1 entry. classify needs 2 to 64.` |
 | fewer than 1 or more than 64 entity types | `types is empty. entities needs 1 to 64.` |

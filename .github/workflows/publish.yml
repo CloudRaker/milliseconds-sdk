@@ -44,7 +44,7 @@ jobs:
       - run: pnpm build
         working-directory: typescript
       # Never ship an empty package, and never ship a broken bin.
-      - run: test -f typescript/dist/index.js && test -f typescript/dist/index.d.ts && test -f typescript/dist/cli.js
+      - run: test -f typescript/dist/index.js && test -f typescript/dist/index.d.ts && test -f typescript/dist/cli.js && test -f typescript/LICENSE
       - run: npm publish --access public --tag "${{ inputs.npm_tag || 'latest' }}"
         working-directory: typescript
 
@@ -57,7 +57,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - run: test -f python/src/milliseconds/_client.py
+      - run: test -f python/src/milliseconds/_client.py && test -f python/LICENSE
       - run: pipx run build python
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:

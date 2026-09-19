@@ -208,6 +208,4 @@ def test_a_label_dict_is_unbounded_server_side() -> None:
 
 def test_an_empty_label_dict(dm: DecisionMachine) -> None:
     none: dict[str, str] = {}
-    refuses(
-        lambda: dm.classify("t", none), "labels is empty. classify needs at least one entry."
-    )
+    refuses(lambda: dm.classify("t", none), "labels is empty. classify needs at least one entry.")

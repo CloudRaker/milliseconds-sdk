@@ -1061,7 +1061,7 @@ documented API trap.
 | a text over 20,000 characters | `texts[3] is 24,110 characters. The limit is 20,000. Split on paragraphs and send the parts as texts.` |
 | an empty text, or an empty element in texts | `text is empty. Send at least one character.` / `texts[1] is empty. Send at least one character.` |
 | `yes-no` with no statement | `yes-no needs a statement. The wire message for a body without one names both fields and misleads.` |
-| a bare string where a list belongs (Python) | `labels must be a list or a dict, not a str.` |
+| a bare string where a list belongs (Python) | `labels is a string. A string sends one entry per letter. Send a list.` |
 | an empty statements or questions array, or over 32 | `statements has 0 items. Send 1 to 32.` |
 | fewer than 2 or more than 64 labels | `labels has 1 entry. classify needs 2 to 64.` |
 | fewer than 1 or more than 64 entity types | `types is empty. entities needs 1 to 64.` |

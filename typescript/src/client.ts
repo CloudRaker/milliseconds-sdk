@@ -5,7 +5,7 @@ import type { CallOptions, ClientOptions, Decision, ErrorCode, RateLimit, Usage 
 
 // ponytail: bumped by hand beside package.json. A build-time define would be config for a
 // value that changes once per release.
-const VERSION = '0.1.1'
+const VERSION = '0.1.2'
 const USER_AGENT = `cloudraker-milliseconds-js/${VERSION}`
 
 const DEFAULT_BASE_URL = 'https://api.milliseconds.ai'

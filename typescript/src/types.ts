@@ -18,7 +18,7 @@ export interface ClientOptions {
   maxRetries?: number
   /** Merged into every request. It cannot override `authorization`. */
   headers?: Record<string, string>
-  /** For tests, proxies, or a Workers service binding. Default globalThis.fetch. */
+  /** For tests or proxies. Default globalThis.fetch. */
   fetch?: typeof globalThis.fetch
   /** The key is a secret. Set true only when the bundle never reaches a user. */
   dangerouslyAllowBrowser?: boolean

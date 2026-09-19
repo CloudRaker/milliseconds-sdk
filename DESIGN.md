@@ -172,7 +172,7 @@ export interface ClientOptions {
   maxRetries?: number
   /** Merged into every request. It cannot override `authorization`. */
   headers?: Record<string, string>
-  /** For tests, proxies, or a Workers service binding. Default globalThis.fetch. */
+  /** For tests or proxies. Default globalThis.fetch. */
   fetch?: typeof globalThis.fetch
   /** The key is a secret. Set true only when the bundle never reaches a user. */
   dangerouslyAllowBrowser?: boolean
@@ -1664,7 +1664,7 @@ what catches a reorder.
 7. Usage and rate limits through `withUsage()`. The trailing-gauge warning.
 8. Errors and retries. The `switch` on `code`. What is never retried.
 9. The mapping table of section 9.
-10. Runtimes: Node, Bun, Deno, Workers with a service binding, and the browser warning.
+10. Runtimes: Node, Bun, Deno, Workers, and the browser warning.
 11. Gotchas: `yes-no` accepts a body the SDK forbids, and `classify-tree` per-level numbers
     do not sum to the header.
 12. Links: docs.milliseconds.ai, the console, the Python package.

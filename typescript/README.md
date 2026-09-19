@@ -250,11 +250,8 @@ const raw = await dm.post<unknown>('/v1/decision-machine-1/classify', { text, la
 Node >= 20, Bun and Deno work with no configuration. The SDK uses global `fetch` and ships
 ESM, CJS and `.d.ts`.
 
-On Cloudflare Workers, pass a service binding's `fetch`:
-
-```ts
-const dm = new DecisionMachine({ apiKey: env.MS_API_KEY, fetch: env.MILLISECONDS.fetch.bind(env.MILLISECONDS) })
-```
+Cloudflare Workers work the same way. Read the key from a secret binding and pass it as
+`apiKey`.
 
 In a browser the constructor throws. Your API key is a secret, and a bundle ships it to every
 visitor. Call the API from your server. `dangerouslyAllowBrowser: true` opts out, and is

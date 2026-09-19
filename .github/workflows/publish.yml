@@ -45,7 +45,15 @@ jobs:
         working-directory: typescript
       # Never ship an empty package, and never ship a broken bin.
       - run: test -f typescript/dist/index.js && test -f typescript/dist/index.d.ts && test -f typescript/dist/cli.js && test -f typescript/LICENSE
-      - run: npm publish --access public --tag "${{ inputs.npm_tag || 'latest' }}"
+      # Idempotent: a rerun after a hand publish of the same version skips instead of failing,
+      # so the pypi job still runs.
+      - run: |
+          v=$(node -p "require('./package.json').version")
+          if npm view "@cloudraker/milliseconds@$v" version >/dev/null 2>&1; then
+            echo "@cloudraker/milliseconds@$v is already on npm, skipping"
+          else
+            npm publish --access public --tag "${{ inputs.npm_tag || 'latest' }}"
+          fi
         working-directory: typescript
 
   # npm runs first. A failure after npm succeeded is fixed by a patch version.

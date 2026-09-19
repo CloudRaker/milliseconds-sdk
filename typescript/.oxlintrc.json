@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "options": { "maxWarnings": 0 },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn",
+    "pedantic": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "ignoreRestSiblings": true, "argsIgnorePattern": "^_" }],
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-debugger": "error",
+    "no-duplicate-imports": "error",
+    "no-self-compare": "error",
+    "no-loss-of-precision": "error",
+    "no-await-in-loop": "off",
+    "no-shadow": "off",
+    "typescript/no-explicit-any": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["**/test/**"],
+      "rules": { "typescript/no-explicit-any": "off", "typescript/no-empty-object-type": "off" }
+    }
+  ],
+  "ignorePatterns": ["dist", "node_modules"]
+}

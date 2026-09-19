@@ -1,0 +1,76 @@
+{
+  "name": "@cloudraker/milliseconds",
+  "version": "0.1.0",
+  "description": "Typed decisions over text. The SDK for decision-machine-1 at milliseconds.ai.",
+  "license": "MIT",
+  "author": "CloudRaker",
+  "homepage": "https://docs.milliseconds.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CloudRaker/milliseconds-sdk.git",
+    "directory": "typescript"
+  },
+  "bugs": "https://github.com/CloudRaker/milliseconds-sdk/issues",
+  "keywords": [
+    "milliseconds",
+    "decision-machine-1",
+    "classification",
+    "extraction",
+    "nlp",
+    "llm"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "bin": {
+    "dm1": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "peerDependencies": {
+    "typescript": ">=5.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  },
+  "scripts": {
+    "build": "tsdown && if grep -l 'node:' dist/index.js dist/index.cjs; then echo 'a node: specifier reached the library bundle' >&2; exit 1; fi",
+    "dev": "tsdown --watch",
+    "test": "vitest run --typecheck",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src test",
+    "format": "oxfmt src test",
+    "prepublishOnly": "pnpm build"
+  }
+}

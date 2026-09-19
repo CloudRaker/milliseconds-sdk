@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "test", "tsdown.config.ts"]
+}

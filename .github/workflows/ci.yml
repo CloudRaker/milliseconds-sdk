@@ -1,0 +1,55 @@
+# Lint, typecheck, test and build both packages on every push and pull request.
+# The live tests skip themselves: MS_API_KEY is not set here.
+name: ci
+
+on: [push, pull_request]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # vitest --typecheck runs test/types.test-d.ts against the pinned TypeScript.
+      - run: pnpm test
+      # The build fails when a node: specifier reaches the library bundle.
+      - run: pnpm build
+
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.13']
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --all-groups
+      - run: uv run ruff check src tests
+      - run: uv run pyright
+      - run: uv run pytest

@@ -1,0 +1,64 @@
+# Publishes the SDKs to npm (@cloudraker/milliseconds) and PyPI
+# (cloudraker-milliseconds). Manual dispatch only — bump the version in
+# typescript/package.json and python/pyproject.toml first, commit, then run this.
+#
+# Release channel: `npm_tag` is the npm dist-tag. `latest` is a real release.
+# `dev` publishes the version without moving `latest`. PyPI needs no equivalent:
+# pip already excludes a PEP 440 prerelease (`0.2.0.devN`) unless `--pre` is passed.
+#
+# One-time setup (both registries use OIDC — no tokens):
+# - npm: the FIRST publish must be done locally (`npm publish --access public`
+#   from typescript/, logged in). npm only accepts a trusted publisher on an
+#   existing package. Then package settings → Trusted Publisher → GitHub Actions:
+#   CloudRaker / milliseconds-sdk / publish.yml, environment blank.
+# - PyPI: a pending trusted publisher on the `cloudraker-milliseconds` project
+#   pointing at this repo and publish.yml. It works before the first publish.
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      npm_tag:
+        description: npm dist-tag (`latest` for a real release, `dev` for a prerelease)
+        required: false
+        default: latest
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: pnpm
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: typescript
+      - run: pnpm build
+        working-directory: typescript
+      # Never ship an empty package, and never ship a broken bin.
+      - run: test -f typescript/dist/index.js && test -f typescript/dist/index.d.ts && test -f typescript/dist/cli.js
+      - run: npm publish --access public --tag "${{ inputs.npm_tag || 'latest' }}"
+        working-directory: typescript
+
+  # npm runs first. A failure after npm succeeded is fixed by a patch version.
+  pypi:
+    needs: npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - run: test -f python/src/milliseconds/_client.py
+      - run: pipx run build python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist

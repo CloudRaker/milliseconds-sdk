@@ -1,6 +1,6 @@
 [project]
 name = "cloudraker-milliseconds"
-version = "0.1.0"
+version = "0.1.1"
 description = "Typed decisions over text. The SDK for decision-machine-1 at milliseconds.ai."
 readme = "README.md"
 license = "MIT"

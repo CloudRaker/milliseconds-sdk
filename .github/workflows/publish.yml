@@ -55,6 +55,10 @@ jobs:
             npm publish --access public --tag "${{ inputs.npm_tag || 'latest' }}"
           fi
         working-directory: typescript
+        env:
+          # Shows the OIDC token exchange with the registry; without it a rejected
+          # trusted-publisher claim surfaces only as ENEEDAUTH.
+          NPM_CONFIG_LOGLEVEL: verbose
 
   # npm runs first. A failure after npm succeeded is fixed by a patch version.
   pypi:

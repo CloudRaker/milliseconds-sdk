@@ -36,7 +36,8 @@ export function checkRuntime(
  * round trip with a local error.
  *
  * An image call may carry no text at all, so `hasImage` allows the empty string. The
- * body then holds `image` and no `text`.
+ * body then holds `image` and no `text`. A batch beside an image is a 400 (`image_with_texts`),
+ * so it fails here instead of after uploading the base64.
  */
 export function checkInput(input: Input, hasImage = false): void {
   if (typeof input === 'string') {
@@ -44,6 +45,7 @@ export function checkInput(input: Input, hasImage = false): void {
     if (input.length > MAX_CHARS) throw tooLong('text', input.length)
     return
   }
+  if (hasImage) throw clientError('provide text or texts, not both. One image takes one text.')
   if (input.length === 0) throw clientError('texts is empty. Send at least one text.')
   if (input.length > MAX_TEXTS)
     throw clientError(

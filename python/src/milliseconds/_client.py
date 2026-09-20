@@ -7,7 +7,7 @@ import os
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, ClassVar, NamedTuple, TypeVar, cast, overload
+from typing import Any, ClassVar, NamedTuple, TypeVar, overload
 
 import httpx
 
@@ -193,15 +193,7 @@ def _prep_extract(text: str | Sequence[str], schema: Any, opts: CallOpts) -> _Ca
     body["schema"] = json_schema
 
     def parse(b: Mapping[str, Any], _usage: Usage) -> Any:
-        data: Any = load(b["data"])
-        boxes = b.get("boxes")
-        # An image extract also carries `boxes`. A dict result takes them; a dataclass
-        # or a pydantic model has no field for them, so they are dropped there.
-        if boxes and isinstance(data, dict):
-            merged = cast("dict[str, Any]", data)
-            merged["boxes"] = boxes
-            return merged
-        return data
+        return load(b["data"])
 
     return _Call("extract", body, depth, parse)
 

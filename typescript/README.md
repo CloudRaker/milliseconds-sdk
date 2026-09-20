@@ -189,7 +189,6 @@ const scanned = await dm.extract('the scan of a till receipt', RECEIPT, {
   image: receipt,
   detail: 'high',
 })
-scanned.boxes?.total // [x1, y1, x2, y2] in the pixels you uploaded
 ```
 
 `image` takes `Uint8Array`, `ArrayBuffer`, `Blob`, a `data:image/(jpeg|png|webp);base64,`
@@ -209,9 +208,7 @@ The base64 never enters the character count. `answer`, `extract`, `entities` and
 generate on the image and bill a multiple of the tier above. **Those multipliers are
 provisional.**
 
-Boxes come back in the pixels of the image you uploaded, and they are `null` when the
-model returned none: `bbox` on an answer, `bbox` on an entity, and `boxes` on the extract
-result, keyed by the dotted field path. An image answer carries no `start` and `end`,
+An image result carries no coordinates. An image answer has `start` and `end` null,
 because there is no text to index.
 
 The CLI takes the same two flags:

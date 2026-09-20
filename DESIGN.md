@@ -59,7 +59,7 @@ OpenAPI document.
 
 | Source fact | File | Effect on the SDK |
 | --- | --- | --- |
-| `answer` returns `{answer, probability, start, end}` all set, or `answer`/`start`/`end` all `null` with `probability: 0`. Never mixed. On an image the answer carries `bbox` and null offsets. | `decide.service.ts` `answer()` | `AnswerResult` is a union, and `start`/`end` are `number \| null` beside an answer. |
+| `answer` returns `{answer, probability, start, end}` all set, or `answer`/`start`/`end` all `null` with `probability: 0`. Never mixed. An image answer has null offsets and no coordinates. | `decide.service.ts` `answer()` | `AnswerResult` is a union; `answer()` types the offsets `null` when the call sends an image. |
 | `kindOf` maps **every** non-object array to kind `string[]`, and `coerce` runs `value.map(String)`. | `lib/json-schema.ts` | An array of numbers arrives as `string[]`. |
 | `coerce` returns `null` for a missing or empty value, for the whole field. | `lib/json-schema.ts` | A scalar array is `string[] \| null`. A null **element** never happens. |
 | An array of objects pushes a `ListPlan` with `fields: []`, and `assemble` writes `[]` unconditionally. | `lib/json-schema.ts` | An array of objects is `never[]`. Never null. |
@@ -117,7 +117,7 @@ milliseconds-sdk/
       types.test-d.ts           expectTypeOf: every claim in section 10
       client.test.ts            stubbed fetch: retries, usage, errors, body shape
       validate.test.ts          every row of section 8
-      image.test.ts             encoding, the limits, the body and the boxes
+      image.test.ts             encoding, the limits and the body
       cli.test.ts               argv in, body and stdout out
       live.test.ts              skipped unless MS_API_KEY is set
   python/
@@ -371,9 +371,12 @@ export interface RateResult<S extends readonly string[] = readonly string[]> {
   scores: { -readonly [K in keyof S]: number }
 }
 
-/** The service sets answer, start and end together, or nulls all three. */
-export type AnswerResult<Q extends string = string> =
-  | { question: Q; answer: string; probability: number; start: number; end: number }
+/**
+ * The service sets answer, start and end together, or nulls all three. An image answer
+ * has no text to index, so `Off` is `null` there.
+ */
+export type AnswerResult<Q extends string = string, Off extends number | null = number> =
+  | { question: Q; answer: string; probability: number; start: Off; end: Off }
   | { question: Q; answer: null; probability: number; start: null; end: null }
 
 export interface Entity<T extends string = string> {

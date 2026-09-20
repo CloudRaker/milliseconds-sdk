@@ -19,8 +19,6 @@ from ._errors import (
 )
 from ._models import (
     AnswerResult,
-    BBox,
-    Boxes,
     CallOpts,
     ClassifyResult,
     ClassifyTreeLevel,
@@ -43,8 +41,6 @@ __all__ = [
     "AnswerResult",
     "AsyncDecisionMachine",
     "AuthenticationError",
-    "BBox",
-    "Boxes",
     "CallOpts",
     "ClassifyResult",
     "ClassifyTreeLevel",

@@ -5,7 +5,6 @@ import { checkInput, checkList, checkSchema, checkSpec } from './validate'
 
 import type {
   AnswerResult,
-  Boxes,
   CallOptions,
   ClassifyResult,
   ClassifyTreeResult,
@@ -14,6 +13,7 @@ import type {
   ExtractSchema,
   Extracted,
   Fan,
+  ImageInput,
   ImageOptions,
   Input,
   LabelOf,
@@ -29,20 +29,16 @@ import type {
 
 const MODEL = 'decision-machine-1'
 
+/** An image answer has no text to index, so its offsets are null. */
+type Offsets<O> = O extends { image: ImageInput } ? null : number
+
 /** The batch shape follows the request, never the response. */
 const same = (raw: unknown) => raw
 const key = (name: 'results' | 'entities') => (raw: unknown) =>
   (raw as Record<string, unknown>)[name]
 
-/**
- * `{ data }` is unwrapped. An image call also carries `boxes`, so it joins the object.
- *
- * A schema property named `boxes` would collide. Name it something else on an image.
- */
-const extracted = (raw: unknown) => {
-  const body = raw as { data: object; boxes?: Boxes }
-  return body.boxes === undefined ? body.data : { ...body.data, boxes: body.boxes }
-}
+/** `{ data }` is unwrapped. */
+const extracted = (raw: unknown) => (raw as { data: object }).data
 
 /**
  * `text` for one result, `texts` for a batch. The mutual exclusion is impossible here.
@@ -162,16 +158,20 @@ export class DecisionMachine extends Client {
   }
 
   /** Quotes the answer out of the text, with its offsets. `answer` is null when nothing fits. */
-  answer<const T extends Input, const Q extends string | readonly string[]>(
+  answer<
+    const T extends Input,
+    const Q extends string | readonly string[],
+    const O extends CallOptions & ImageOptions = CallOptions,
+  >(
     input: T,
     questions: Q,
-    options?: CallOptions & ImageOptions,
+    options?: O,
   ): Decision<
     Fan<
       T,
       Q extends readonly string[]
-        ? { -readonly [K in keyof Q]: AnswerResult<Q[K] & string> }
-        : AnswerResult<Q & string>
+        ? { -readonly [K in keyof Q]: AnswerResult<Q[K] & string, Offsets<O>> }
+        : AnswerResult<Q & string, Offsets<O>>
     >
   > {
     checkInput(input, options?.image !== undefined)
@@ -197,7 +197,7 @@ export class DecisionMachine extends Client {
     input: T,
     schema: S,
     options?: CallOptions & ImageOptions,
-  ): Decision<Fan<T, Extracted<SchemaOutput<S>> & { boxes?: Boxes }>> {
+  ): Decision<Fan<T, Extracted<SchemaOutput<S>>>> {
     checkInput(input, options?.image !== undefined)
     const json = toJsonSchema(schema)
     checkSchema(json)

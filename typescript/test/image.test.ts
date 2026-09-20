@@ -98,7 +98,7 @@ describe('the image field', () => {
   })
 
   test('every capability carries the image', async () => {
-    const { calls, dm } = stub({ data: {}, boxes: {} })
+    const { calls, dm } = stub({ data: {} })
     await dm.yesNo('', 'The document is a receipt.', { image: PNG_BASE64 })
     await dm.rate('', ['low', 'high'], { image: PNG_BASE64 })
     await dm.answer('', 'What is the total?', { image: PNG_BASE64 })
@@ -119,38 +119,13 @@ describe('the image field', () => {
   })
 })
 
-describe('the boxes of an image result', () => {
-  test('extract joins boxes to the data', async () => {
-    const boxes = { total: [10, 20, 30, 40] }
-    const { dm } = stub({ data: { total: '9.99' }, boxes })
-    const data = await dm.extract(
-      '',
-      { type: 'object', properties: { total: { type: 'string' } } },
-      {
-        image: PNG_BASE64,
-      },
-    )
-    expect(data).toEqual({ total: '9.99', boxes })
-  })
-
-  test('a text extract carries no boxes key', async () => {
-    const { dm } = stub({ data: { total: '9.99' } })
-    const data = await dm.extract('a receipt', {
-      type: 'object',
-      properties: { total: { type: 'string' } },
-    })
-    expect(data).toEqual({ total: '9.99' })
-  })
-
-  test('the bbox of an entity and of an answer reaches the caller', async () => {
-    const entities = stub({ entities: [{ type: 'person', text: 'Ada', bbox: [1, 2, 3, 4] }] })
-    const [first] = await entities.dm.entities('', ['person'], { image: PNG_BASE64 })
-    expect(first?.bbox).toEqual([1, 2, 3, 4])
-
-    const answer = stub({ answer: '9.99', probability: 0.9, start: null, end: null, bbox: null })
-    const one = await answer.dm.answer('', 'What is the total?', { image: PNG_BASE64 })
-    expect(one.bbox).toBeNull()
-  })
+test('a batch of texts beside an image is refused locally', async () => {
+  const { calls, dm } = stub()
+  const error = await refused(() =>
+    dm.classify(['one', 'two'], ['receipt', 'invoice'], { image: PNG_BASE64 }),
+  )
+  expect(error.message).toContain('text or texts')
+  expect(calls).toHaveLength(0)
 })
 
 test('imageFile reads a file as base64', () => {

@@ -43,12 +43,6 @@ export interface ImageOptions {
   detail?: Detail
 }
 
-/** [x1, y1, x2, y2], in the pixels of the image you uploaded. */
-export type BBox = [number, number, number, number]
-
-/** Dotted field path -> box. Empty when the model returned none. */
-export type Boxes = Record<string, BBox>
-
 export interface CallOptions {
   timeout?: number
   maxRetries?: number
@@ -218,20 +212,12 @@ export interface RateResult<S extends readonly string[] = readonly string[]> {
 /**
  * The text path sets answer, start and end together, or nulls all three.
  *
- * On an image there is no text to index, so `start` and `end` are null beside an answer,
- * and `bbox` holds the region in the pixels of the image you uploaded.
+ * An image answer has no text to index, so `start` and `end` are null beside an answer.
+ * `Off` carries that: `answer()` sets it to `null` when the call sends an image.
  */
-export type AnswerResult<Q extends string = string> =
-  | {
-      question: Q
-      answer: string
-      probability: number
-      start: number | null
-      end: number | null
-      /** Absent on a text call: only an image answer carries a box. */
-      bbox?: BBox | null
-    }
-  | { question: Q; answer: null; probability: number; start: null; end: null; bbox?: null }
+export type AnswerResult<Q extends string = string, Off extends number | null = number> =
+  | { question: Q; answer: string; probability: number; start: Off; end: Off }
+  | { question: Q; answer: null; probability: number; start: null; end: null }
 
 export interface Entity<T extends string = string> {
   type: T
@@ -239,8 +225,6 @@ export interface Entity<T extends string = string> {
   probability: number
   start: number
   end: number
-  /** The region in the uploaded image. Absent on text, null when the model gave none. */
-  bbox?: BBox | null
 }
 
 export interface VerifyResult {

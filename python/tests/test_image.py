@@ -1,4 +1,4 @@
-"""One image per call: encoding, the 5 MB limit, the body shape and the boxes."""
+"""One image per call: encoding, the 5 MB limit and the body shape."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import Any
 
 import httpx
 import pytest
-from conftest import ALL_HEADERS, KEY, api, async_client, recorder, sync_client
+from conftest import ALL_HEADERS, KEY, async_client, recorder, sync_client
 
-from milliseconds import AnswerResult, DecisionMachine, Entity, InvalidRequestError
+from milliseconds import DecisionMachine, InvalidRequestError
 
 PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE"
@@ -135,63 +135,6 @@ def test_an_unknown_detail_tier_is_refused(dm: DecisionMachine) -> None:
         dm.classify("", LABELS, image=PNG_BASE64, detail="ultra")  # type: ignore[typeddict-item]
 
 
-# ---- the boxes ------------------------------------------------------------
-
-
-def test_extract_joins_boxes_to_the_data() -> None:
-    boxes = {"total": [10, 20, 30, 40]}
-    handler = replying({"data": {"total": "9.99"}, "boxes": boxes})
-    with sync_client(handler) as dm:
-        data = dm.extract(
-            "",
-            {"type": "object", "properties": {"total": {"type": "string"}}},
-            image=PNG_BASE64,
-        )
-    assert data == {"total": "9.99", "boxes": boxes}
-
-
-def test_a_text_extract_carries_no_boxes(dm: DecisionMachine) -> None:
-    data = dm.extract("a receipt", {"type": "object", "properties": {"total": {"type": "string"}}})
-    assert data == {"total": None}
-
-
-def test_an_entity_and_an_answer_carry_a_bbox() -> None:
-    entities = replying(
-        {
-            "entities": [
-                {
-                    "type": "person",
-                    "text": "Ada",
-                    "probability": 0.9,
-                    "start": 0,
-                    "end": 3,
-                    "bbox": [1, 2, 3, 4],
-                }
-            ]
-        }
-    )
-    with sync_client(entities) as dm:
-        found: Any = dm.entities("", ["person"], image=PNG_BASE64)
-    first: Entity[str] = found[0]
-    assert first.bbox == [1, 2, 3, 4]
-
-    answered = replying(
-        {
-            "question": "What is the total?",
-            "answer": "9.99",
-            "probability": 0.9,
-            "start": None,
-            "end": None,
-            "bbox": [5, 6, 7, 8],
-        }
-    )
-    with sync_client(answered) as dm:
-        one: AnswerResult = dm.answer("", "What is the total?", image=PNG_BASE64)
-    assert one.bbox == [5, 6, 7, 8]
-    assert one.span is None
-
-
-def test_a_text_result_has_no_bbox(dm: DecisionMachine) -> None:
-    one = dm.answer("Apple announced it.", "Who announced the product?")
-    assert one.bbox is None
-    assert api is not None
+def test_a_batch_of_texts_beside_an_image_is_refused(dm: DecisionMachine) -> None:
+    with pytest.raises(InvalidRequestError, match="text or texts"):
+        dm.classify(["one", "two"], LABELS, image=PNG_BASE64)

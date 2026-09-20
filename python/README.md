@@ -206,7 +206,6 @@ kind.label
 
 # Text beside the image is read with it. `detail` picks the resolution.
 data = dm.extract("the scan of a till receipt", RECEIPT, image=receipt, detail="high")
-data.get("boxes")  # dotted field path -> [x1, y1, x2, y2], on an image call
 ```
 
 `image` takes `bytes`, a `pathlib.Path`, a `data:image/(jpeg|png|webp);base64,` URL, or
@@ -225,11 +224,8 @@ The base64 never enters the character count. `answer`, `extract`, `entities` and
 generate on the image and bill a multiple of the tier above. **Those multipliers are
 provisional.**
 
-Boxes come back in the pixels of the image you uploaded, and they are `None` when the
-model returned none: `AnswerResult.bbox`, `Entity.bbox`, and a `boxes` key on the extract
-result, keyed by the dotted field path. The `boxes` key needs a `dict` schema: a
-dataclass, a `TypedDict` and a pydantic model hold no field for it, so it is dropped
-there. An image answer carries no `start` and `end`, because there is no text to index.
+An image result carries no coordinates. `AnswerResult.start` and `.end` are `None` on an
+image answer, because there is no text to index.
 
 ## Usage and rate limits
 

@@ -5,8 +5,6 @@ import { DecisionMachine, isMillisecondsError, typed } from '../src/index'
 import type { MillisecondsError } from '../src/errors'
 import type {
   AnswerResult,
-  BBox,
-  Boxes,
   ClassifyResult,
   ClassifyTreeResult,
   Entity,
@@ -262,13 +260,12 @@ test('7.8 answer narrows the null case', async () => {
   ])
   expectTypeOf(who).toEqualTypeOf<AnswerResult<'Who announced the product?'>>()
   expectTypeOf(cost).toEqualTypeOf<AnswerResult<'How much does it cost?'>>()
-  // An answer over an image has no text to index, so the offsets are null beside it.
+  // A text answer keeps its offsets: no narrowing needed once the answer is there.
   if (who.answer !== null) {
-    expectTypeOf(who.start).toEqualTypeOf<number | null>()
-    expectTypeOf(who.end).toEqualTypeOf<number | null>()
-    expectTypeOf(who.bbox).toEqualTypeOf<BBox | null | undefined>()
+    expectTypeOf(who.start).toEqualTypeOf<number>()
+    expectTypeOf(who.end).toEqualTypeOf<number>()
+    article.slice(who.start, who.end)
   }
-  if (who.start !== null && who.end !== null) article.slice(who.start, who.end)
   expectTypeOf(cost.start).toEqualTypeOf<number | null>()
   // @ts-expect-error start is number | null before the check
   article.slice(cost.start, cost.end)
@@ -365,8 +362,11 @@ test('the README image snippet compiles', async () => {
     image: receipt,
     detail: 'high',
   })
-  expectTypeOf(scanned.boxes).toEqualTypeOf<Boxes | undefined>()
   expectTypeOf(scanned.total).toEqualTypeOf<string | null>()
+
+  // An image answer has no text to index, so its offsets are typed null.
+  const total = await dm.answer('', 'What is the total?', { image: receipt })
+  if (total.answer !== null) expectTypeOf(total.start).toEqualTypeOf<null>()
 })
 
 test('the README snippets compile', async () => {

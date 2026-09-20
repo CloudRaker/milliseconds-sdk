@@ -735,4 +735,19 @@ describe('--image', () => {
     expect(r.code).toBe(2)
     expect(r.calls).toHaveLength(0)
   })
+
+  test('a file that is not a JPEG, PNG or WebP never reaches the wire', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'dm1-cli-')), 'notes.txt')
+    writeFileSync(path, 'plain text, not an image')
+    const r = await cli(['classify', '--image', path, 'a', 'b'])
+    expect(r.code).toBe(2)
+    expect(r.err).toContain('data:image/')
+    expect(r.calls).toHaveLength(0)
+    // The piped-body path builds the request itself, so it is checked too.
+    const piped = await cli(['classify', '--image', path, 'a', 'b'], {
+      stdin: JSON.stringify({ text: 'hi' }),
+    })
+    expect(piped.code).toBe(2)
+    expect(piped.calls).toHaveLength(0)
+  })
 })

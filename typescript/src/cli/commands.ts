@@ -1,3 +1,4 @@
+import { encodeImage } from '../image'
 import { imageFile } from '../node'
 import { columns, int, kv, num, p3, scores, text, type Row } from './print'
 import { loadDocument, specSize, UsageError, type SpecList } from './spec'
@@ -106,6 +107,13 @@ function image(c: Call): ImageOptions {
     encoded = imageFile(c.v.image)
   } catch (e) {
     throw new UsageError(`cannot read ${c.v.image}: ${(e as Error).message}`)
+  }
+  try {
+    // The SDK's own check. A piped body goes straight to `dm.post`, which never calls it,
+    // so both paths reject a bad or oversized file here instead of uploading it.
+    encodeImage(encoded)
+  } catch (e) {
+    throw new UsageError(`${c.v.image}: ${(e as Error).message}`)
   }
   return {
     image: encoded,

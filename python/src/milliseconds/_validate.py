@@ -40,13 +40,16 @@ def text_input(value: str | Sequence[str], has_image: bool = False) -> None:
     """One text or a batch of 1 to 32, each at most 20,000 characters.
 
     An image call may carry no text at all, so `has_image` allows the empty string.
-    The body then holds `image` and no `text`.
+    The body then holds `image` and no `text`. A batch beside an image is a 400
+    (`image_with_texts`), so it fails here instead of after uploading the base64.
     """
     if isinstance(value, str):
         if value == "" and has_image:
             return
         _chars("text", value)
         return
+    if has_image:
+        raise client_error("provide text or texts, not both. One image takes one text.")
     n = len(value)
     if n == 0:
         raise client_error("texts is empty. Send at least one text.")

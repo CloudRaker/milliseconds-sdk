@@ -1,5 +1,5 @@
 import { encodeImage } from '../image'
-import { imageFile } from '../node'
+import { readFileSync } from 'node:fs'
 import { columns, int, kv, num, p3, scores, text, type Row } from './print'
 import { loadDocument, specSize, UsageError, type SpecList } from './spec'
 
@@ -104,7 +104,8 @@ function image(c: Call): ImageOptions {
   if (c.v.image === undefined) return {}
   let encoded: string
   try {
-    encoded = imageFile(c.v.image)
+    // Bare base64: the SDK's own check below names a wrong format the same way as before.
+    encoded = readFileSync(c.v.image).toString('base64')
   } catch (e) {
     throw new UsageError(`cannot read ${c.v.image}: ${(e as Error).message}`)
   }

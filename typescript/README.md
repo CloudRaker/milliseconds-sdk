@@ -178,11 +178,11 @@ Every capability reads one image. Send the bytes: the API never fetches a URL.
 ```ts
 import { imageFile } from '@cloudraker/milliseconds/node'
 
-// Or a Uint8Array, an ArrayBuffer, a Blob, a data URL, or bare base64.
+// Or a Uint8Array, an ArrayBuffer, a Blob, or a data URL.
 const receipt = imageFile('receipt.jpg')
 
-// No text at all: pass an empty first argument.
-const kind = await dm.classify('', DOCUMENT_TYPES, { image: receipt })
+// The image is the input: pass it where the text goes.
+const kind = await dm.classify(receipt, DOCUMENT_TYPES)
 
 // Text beside the image is read with it. `detail` picks the resolution.
 const scanned = await dm.extract('the scan of a till receipt', RECEIPT, {
@@ -191,8 +191,9 @@ const scanned = await dm.extract('the scan of a till receipt', RECEIPT, {
 })
 ```
 
-`image` takes `Uint8Array`, `ArrayBuffer`, `Blob`, a `data:image/(jpeg|png|webp);base64,`
-URL, or bare base64. `imageFile(path)` reads a file in Node. One image per call, at most
+The first argument takes `Uint8Array`, `ArrayBuffer`, `Blob` or a `data:image/(jpeg|png|webp);base64,`
+URL as the image; `options.image` takes the same plus bare base64, for text beside the image.
+`imageFile(path)` reads a file in Node. One image per call, at most
 5 MB, JPEG, PNG or WebP. The SDK refuses a URL, another format and an over-size image
 before the call.
 

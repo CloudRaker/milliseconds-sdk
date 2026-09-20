@@ -128,8 +128,48 @@ test('a batch of texts beside an image is refused locally', async () => {
   expect(calls).toHaveLength(0)
 })
 
-test('imageFile reads a file as base64', () => {
+test('imageFile reads a file as a data URL', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'dm1-')), 'pixel.png')
   writeFileSync(path, PNG_BYTES)
-  expect(imageFile(path)).toBe(PNG_BASE64)
+  expect(imageFile(path)).toBe(DATA_URL)
+})
+
+describe('the image as the input', () => {
+  test('bytes in the first argument are the image, and no text is sent', async () => {
+    const { calls, dm } = stub()
+    await dm.classify(PNG_BYTES, ['receipt', 'invoice'], { detail: 'low' })
+    expect(calls[0]).toEqual({ labels: ['receipt', 'invoice'], detail: 'low', image: PNG_BASE64 })
+  })
+
+  test('a file read with imageFile works as the input', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ms-'))
+    const path = join(dir, 'receipt.png')
+    writeFileSync(path, PNG_BYTES)
+    const { calls, dm } = stub({ statement: 'x', answer: true, probability: 0.9 })
+    const result = await dm.yesNo(imageFile(path), 'This is a receipt.')
+    expect(result.answer).toBe(true)
+    expect(calls[0]?.image).toBe(DATA_URL)
+    expect(calls[0]).not.toHaveProperty('text')
+  })
+
+  test('a data URL string in the first argument is the image, bare base64 stays text', async () => {
+    const { calls, dm } = stub()
+    await dm.classify(DATA_URL, ['receipt', 'invoice'])
+    expect(calls[0]).toEqual({ labels: ['receipt', 'invoice'], image: DATA_URL })
+    await dm.classify(PNG_BASE64, ['receipt', 'invoice'])
+    expect(calls[1]).toEqual({ text: PNG_BASE64, labels: ['receipt', 'invoice'] })
+  })
+
+  test('an image input beside options.image is refused before any call', async () => {
+    const { calls, dm } = stub()
+    const e = await refused(() => dm.classify(PNG_BYTES, ['a', 'b'], { image: PNG_BYTES }))
+    expect(e.message).toMatch(/One image per call/)
+    expect(calls).toHaveLength(0)
+  })
+
+  test('a single result comes back for an image input, not a batch', async () => {
+    const { dm } = stub()
+    const result = await dm.classify(PNG_BYTES, ['receipt', 'invoice'])
+    expect(result.label).toBe('receipt')
+  })
 })

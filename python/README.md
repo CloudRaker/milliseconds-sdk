@@ -200,16 +200,16 @@ receipt = base64.b64decode(
 DOCUMENT_TYPES = {"receipt": "a till receipt", "invoice": "a supplier invoice"}
 RECEIPT = {"type": "object", "properties": {"total": {"type": "string"}}}
 
-# No text at all: pass an empty string.
-kind = dm.classify("", DOCUMENT_TYPES, image=receipt)
+# The image is the input: pass it where the text goes.
+kind = dm.classify(receipt, DOCUMENT_TYPES)
 kind.label
 
 # Text beside the image is read with it. `detail` picks the resolution.
 data = dm.extract("the scan of a till receipt", RECEIPT, image=receipt, detail="high")
 ```
 
-`image` takes `bytes`, a `pathlib.Path`, a `data:image/(jpeg|png|webp);base64,` URL, or
-bare base64. One image per call, at most 5 MB, JPEG, PNG or WebP. The SDK refuses a URL,
+The first argument takes `bytes`, a `pathlib.Path` or a `data:image/(jpeg|png|webp);base64,`
+URL as the image; `image=` takes the same plus bare base64, for text beside the image. One image per call, at most 5 MB, JPEG, PNG or WebP. The SDK refuses a URL,
 another format and an over-size image before the call.
 
 `detail` sets the longest edge and the billed image tokens.

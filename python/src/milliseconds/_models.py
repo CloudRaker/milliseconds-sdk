@@ -42,8 +42,8 @@ Detail = Literal["low", "medium", "high"]
 class CallOpts(TypedDict, total=False):
     """Per-call overrides. Every capability takes these as keyword arguments.
 
-    `image` sends one JPEG, PNG or WebP, at most 5 MB, beside the text or in place
-    of it. `detail` picks the resolution and the billed image tokens: low 1,000,
+    `image` sends one JPEG, PNG or WebP, at most 5 MB, beside the text.
+    Without text, pass the image as the first argument (bytes, a Path or a data URL).
     medium 2,000, high 4,000. `answer` bills 1.5x that, `extract`, `entities` and
     `verify` 2x. `extract` on an image accepts at most 5 fields.
     """

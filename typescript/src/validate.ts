@@ -1,6 +1,5 @@
 import { clientError } from './errors'
 
-import type { Input } from './types'
 
 const MAX_CHARS = 20_000
 const MAX_TEXTS = 32
@@ -39,7 +38,7 @@ export function checkRuntime(
  * body then holds `image` and no `text`. A batch beside an image is a 400 (`image_with_texts`),
  * so it fails here instead of after uploading the base64.
  */
-export function checkInput(input: Input, hasImage = false): void {
+export function checkInput(input: string | readonly string[], hasImage = false): void {
   if (typeof input === 'string') {
     if (input === '' && !hasImage) throw empty('text')
     if (input.length > MAX_CHARS) throw tooLong('text', input.length)

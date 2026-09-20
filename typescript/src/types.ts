@@ -104,7 +104,11 @@ export type ErrorCode =
 
 // ---- inference helpers ---------------------------------------------------
 
-export type Input = string | readonly string[]
+/** Image bytes passed where the text goes: the image is the input. A `data:image/...` string counts too. */
+export type Picture = Uint8Array | ArrayBuffer | Blob
+
+/** One text, a batch of texts, or the image itself (`dm.classify(imageFile('receipt.jpg'), LABELS)`). */
+export type Input = string | readonly string[] | Picture
 
 /** One text gives one result. A tuple of texts gives a tuple of results, same length. */
 export type Fan<T extends Input, R> = T extends readonly string[]

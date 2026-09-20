@@ -1,4 +1,5 @@
 import { Client } from './client'
+import { clientError } from './errors'
 import { encodeImage } from './image'
 import { toJsonSchema } from './schema'
 import { checkInput, checkList, checkSchema, checkSpec } from './validate'
@@ -46,8 +47,23 @@ const extracted = (raw: unknown) => (raw as { data: object }).data
  * An empty string sends no text at all. Only an image call reaches this: `checkInput`
  * refuses an empty text otherwise.
  */
-const inputBody = (input: Input) =>
+const inputBody = (input: Text) =>
   typeof input === 'string' ? (input === '' ? {} : { text: input }) : { texts: input }
+
+type Text = string | readonly string[]
+const PICTURE_STRING = /^data:image\//i
+
+/**
+ * The image may be the input itself: `dm.classify(imageFile('receipt.jpg'), LABELS)`. It then
+ * moves to `options.image` and the text becomes empty, so every other line reads one shape.
+ */
+function pictured<O extends ImageOptions | undefined>(input: Input, options: O): [Text, O] {
+  const picture = typeof input === 'string' ? PICTURE_STRING.test(input) : !Array.isArray(input)
+  if (!picture) return [input as Text, options]
+  if (options?.image !== undefined)
+    throw clientError('One image per call: pass it as the input, or as options.image, not both.')
+  return ['', { ...options, image: input as ImageInput } as O]
+}
 
 /** The body, plus the image when there is one. A Blob makes it a promise. */
 function withImage(body: object, options: ImageOptions | undefined): object | Promise<object> {
@@ -83,18 +99,19 @@ export class DecisionMachine extends Client {
         : YesNoResult<S & string>
     >
   > {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     checkSpec('statements', statements)
     const { when_true, when_false, ...call } = options ?? {}
     const body = {
-      ...inputBody(input),
+      ...inputBody(text),
       ...(typeof statements === 'string' ? { statement: statements } : { statements }),
       ...(when_true === undefined ? {} : { when_true }),
       ...(when_false === undefined ? {} : { when_false }),
     }
     return this.capability(
       'yes-no',
-      withImage(body, options),
+      withImage(body, opts),
       input,
       call,
       typeof statements === 'string' ? same : key('results'),
@@ -107,11 +124,12 @@ export class DecisionMachine extends Client {
     labels: L,
     options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, ClassifyResult<LabelOf<L>>>> {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     checkList('labels', labels, 2, 64, 'classify')
     return this.capability(
       'classify',
-      withImage({ ...inputBody(input), labels }, options),
+      withImage({ ...inputBody(text), labels }, opts),
       input,
       options,
       same,
@@ -129,11 +147,12 @@ export class DecisionMachine extends Client {
     tree: N,
     options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, ClassifyTreeResult<TreeLabels<N>, LeafLabels<N>>>> {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     checkList('labels', tree, 2, 64, 'classify-tree', true)
     return this.capability(
       'classify-tree',
-      withImage({ ...inputBody(input), tree }, options),
+      withImage({ ...inputBody(text), tree }, opts),
       input,
       options,
       same,
@@ -146,11 +165,12 @@ export class DecisionMachine extends Client {
     scale: S,
     options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, RateResult<S>>> {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     checkList('scale', scale, 2, 10, 'rate')
     return this.capability(
       'rate',
-      withImage({ ...inputBody(input), scale }, options),
+      withImage({ ...inputBody(text), scale }, opts),
       input,
       options,
       same,
@@ -174,15 +194,16 @@ export class DecisionMachine extends Client {
         : AnswerResult<Q & string, Offsets<O>>
     >
   > {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     checkSpec('questions', questions)
     const body = {
-      ...inputBody(input),
+      ...inputBody(text),
       ...(typeof questions === 'string' ? { question: questions } : { questions }),
     }
     return this.capability(
       'answer',
-      withImage(body, options),
+      withImage(body, opts),
       input,
       options,
       typeof questions === 'string' ? same : key('results'),
@@ -198,12 +219,13 @@ export class DecisionMachine extends Client {
     schema: S,
     options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, Extracted<SchemaOutput<S>>>> {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     const json = toJsonSchema(schema)
     checkSchema(json)
     return this.capability(
       'extract',
-      withImage({ ...inputBody(input), schema: json }, options),
+      withImage({ ...inputBody(text), schema: json }, opts),
       input,
       options,
       extracted,
@@ -216,11 +238,12 @@ export class DecisionMachine extends Client {
     types: E,
     options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, Entity<LabelOf<E>>[]>> {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     checkList('types', types, 1, 64, 'entities')
     return this.capability(
       'entities',
-      withImage({ ...inputBody(input), types }, options),
+      withImage({ ...inputBody(text), types }, opts),
       input,
       options,
       key('entities'),
@@ -234,13 +257,14 @@ export class DecisionMachine extends Client {
     value: string | number,
     options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, VerifyResult>> {
-    checkInput(input, options?.image !== undefined)
+    const [text, opts] = pictured(input, options)
+    checkInput(text, opts?.image !== undefined)
     const body = {
-      ...inputBody(input),
+      ...inputBody(text),
       field: typeof field === 'string' ? { name: field } : field,
       value,
     }
-    return this.capability('verify', withImage(body, options), input, options, same)
+    return this.capability('verify', withImage(body, opts), input, options, same)
   }
 
   /** `{ results }` is unwrapped for a batch, and the per-text envelope for one text. */
@@ -251,10 +275,9 @@ export class DecisionMachine extends Client {
     options: CallOptions | undefined,
     one: (raw: unknown) => unknown,
   ): Decision<R> {
-    const unwrap =
-      typeof input === 'string'
-        ? one
-        : (raw: unknown) => ((raw as { results: unknown[] }).results ?? []).map(one)
+    const unwrap = Array.isArray(input)
+      ? (raw: unknown) => ((raw as { results: unknown[] }).results ?? []).map(one)
+      : one
     return this.call<R>(`/v1/${MODEL}/${name}`, body, options, unwrap as (raw: unknown) => R)
   }
 }

@@ -7,7 +7,7 @@ import os
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, ClassVar, NamedTuple, TypeVar, overload
+from typing import Any, ClassVar, NamedTuple, TypeVar, cast, overload
 
 import httpx
 
@@ -30,6 +30,10 @@ from ._models import (
     build,
 )
 from ._schema import to_json_schema
+
+# The image itself may be the input: bytes, a pathlib.Path, or a `data:image/...` string.
+Picture = bytes | bytearray | os.PathLike[str]
+Input = str | Sequence[str] | Picture
 
 if sys.version_info >= (3, 11):
     from typing import Unpack
@@ -109,7 +113,7 @@ def _listing(value: Sequence[str] | Mapping[str, str]) -> Any:
     return dict(value) if isinstance(value, Mapping) else list(value)
 
 
-def _input(text: str | Sequence[str], opts: CallOpts) -> tuple[dict[str, Any], int]:
+def _input(text: Input, opts: CallOpts) -> tuple[dict[str, Any], int]:
     """`Array.isArray(input)` picks `texts` over `text`. The reply follows the request.
 
     `image` and `detail` leave the call options here and join the body, so the
@@ -117,12 +121,20 @@ def _input(text: str | Sequence[str], opts: CallOpts) -> tuple[dict[str, Any], i
     """
     image: Any = opts.pop("image", None)
     detail: Any = opts.pop("detail", None)
-    _validate.text_input(text, image is not None)
-    if isinstance(text, str):
-        body: dict[str, Any] = {} if text == "" and image is not None else {"text": text}
+    # The image may be the input itself: dm.classify(Path("receipt.jpg"), LABELS).
+    if _image.is_picture(text):
+        if image is not None:
+            raise _validate.client_error(
+                "One image per call: pass it as the input, or as image=, not both."
+            )
+        image, text = text, ""
+    words = cast("str | Sequence[str]", text)
+    _validate.text_input(words, image is not None)
+    if isinstance(words, str):
+        body: dict[str, Any] = {} if words == "" and image is not None else {"text": words}
         depth = 0
     else:
-        body, depth = {"texts": list(text)}, 1
+        body, depth = {"texts": list(words)}, 1
     if image is not None:
         body["image"] = _image.encode(image)
         if detail is not None:
@@ -131,7 +143,7 @@ def _input(text: str | Sequence[str], opts: CallOpts) -> tuple[dict[str, Any], i
 
 
 def _prep_yes_no(
-    text: str | Sequence[str],
+    text: Input,
     statements: str | Sequence[str],
     when_true: str | None,
     when_false: str | None,
@@ -151,31 +163,27 @@ def _prep_yes_no(
     return _Call("yes-no", body, depth, _yes_no)
 
 
-def _prep_classify(
-    text: str | Sequence[str], labels: Sequence[str] | Mapping[str, str], opts: CallOpts
-) -> _Call:
+def _prep_classify(text: Input, labels: Sequence[str] | Mapping[str, str], opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     _validate.labels(labels)
     body["labels"] = _listing(labels)
     return _Call("classify", body, depth, _classify)
 
 
-def _prep_classify_tree(text: str | Sequence[str], tree: Tree, opts: CallOpts) -> _Call:
+def _prep_classify_tree(text: Input, tree: Tree, opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     body["tree"] = dict(tree)
     return _Call("classify-tree", body, depth, _tree)
 
 
-def _prep_rate(text: str | Sequence[str], scale: Sequence[str], opts: CallOpts) -> _Call:
+def _prep_rate(text: Input, scale: Sequence[str], opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     _validate.scale(scale)
     body["scale"] = list(scale)
     return _Call("rate", body, depth, _rate)
 
 
-def _prep_answer(
-    text: str | Sequence[str], questions: str | Sequence[str], opts: CallOpts
-) -> _Call:
+def _prep_answer(text: Input, questions: str | Sequence[str], opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     _validate.statements("questions", questions)
     if isinstance(questions, str):
@@ -186,7 +194,7 @@ def _prep_answer(
     return _Call("answer", body, depth, _answer)
 
 
-def _prep_extract(text: str | Sequence[str], schema: Any, opts: CallOpts) -> _Call:
+def _prep_extract(text: Input, schema: Any, opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     json_schema, load = to_json_schema(schema)
     _validate.schema(json_schema)
@@ -198,18 +206,14 @@ def _prep_extract(text: str | Sequence[str], schema: Any, opts: CallOpts) -> _Ca
     return _Call("extract", body, depth, parse)
 
 
-def _prep_entities(
-    text: str | Sequence[str], types: Sequence[str] | Mapping[str, str], opts: CallOpts
-) -> _Call:
+def _prep_entities(text: Input, types: Sequence[str] | Mapping[str, str], opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     _validate.types(types)
     body["types"] = _listing(types)
     return _Call("entities", body, depth, _entity_list)
 
 
-def _prep_verify(
-    text: str | Sequence[str], field: str | Field, value: str | float, opts: CallOpts
-) -> _Call:
+def _prep_verify(text: Input, field: str | Field, value: str | float, opts: CallOpts) -> _Call:
     body, depth = _input(text, opts)
     body["field"] = {"name": field} if isinstance(field, str) else dict(field)
     body["value"] = value
@@ -368,7 +372,7 @@ class DecisionMachine(_Base):
 
     @overload
     def classify(
-        self, text: str, labels: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
+        self, text: str | Picture, labels: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
     ) -> ClassifyResult[L]: ...
     @overload
     def classify(
@@ -385,7 +389,7 @@ class DecisionMachine(_Base):
 
     @overload
     def classify_tree(
-        self, text: str, tree: Tree, **opts: Unpack[CallOpts]
+        self, text: str | Picture, tree: Tree, **opts: Unpack[CallOpts]
     ) -> ClassifyTreeResult: ...
     @overload
     def classify_tree(
@@ -402,7 +406,9 @@ class DecisionMachine(_Base):
         return self._send(_prep_classify_tree(text, tree, opts), opts)
 
     @overload
-    def rate(self, text: str, scale: Sequence[L], **opts: Unpack[CallOpts]) -> RateResult[L]: ...
+    def rate(
+        self, text: str | Picture, scale: Sequence[L], **opts: Unpack[CallOpts]
+    ) -> RateResult[L]: ...
     @overload
     def rate(
         self, text: Sequence[str], scale: Sequence[L], **opts: Unpack[CallOpts]
@@ -413,10 +419,12 @@ class DecisionMachine(_Base):
         return self._send(_prep_rate(text, scale, opts), opts)
 
     @overload
-    def answer(self, text: str, questions: str, **opts: Unpack[CallOpts]) -> AnswerResult: ...
+    def answer(
+        self, text: str | Picture, questions: str, **opts: Unpack[CallOpts]
+    ) -> AnswerResult: ...
     @overload
     def answer(
-        self, text: str, questions: Sequence[str], **opts: Unpack[CallOpts]
+        self, text: str | Picture, questions: Sequence[str], **opts: Unpack[CallOpts]
     ) -> Results[AnswerResult]: ...
     @overload
     def answer(
@@ -436,10 +444,10 @@ class DecisionMachine(_Base):
         return self._send(_prep_answer(text, questions, opts), opts)
 
     @overload
-    def extract(self, text: str, schema: type[T], **opts: Unpack[CallOpts]) -> T: ...
+    def extract(self, text: str | Picture, schema: type[T], **opts: Unpack[CallOpts]) -> T: ...
     @overload
     def extract(
-        self, text: str, schema: Mapping[str, Any], **opts: Unpack[CallOpts]
+        self, text: str | Picture, schema: Mapping[str, Any], **opts: Unpack[CallOpts]
     ) -> dict[str, Any]: ...
     @overload
     def extract(
@@ -460,7 +468,7 @@ class DecisionMachine(_Base):
 
     @overload
     def entities(
-        self, text: str, types: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
+        self, text: str | Picture, types: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
     ) -> Results[Entity[L]]: ...
     @overload
     def entities(
@@ -473,7 +481,7 @@ class DecisionMachine(_Base):
 
     @overload
     def verify(
-        self, text: str, field: str | Field, value: str | float, **opts: Unpack[CallOpts]
+        self, text: str | Picture, field: str | Field, value: str | float, **opts: Unpack[CallOpts]
     ) -> VerifyResult: ...
     @overload
     def verify(
@@ -605,7 +613,7 @@ class AsyncDecisionMachine(_Base):
 
     @overload
     async def classify(
-        self, text: str, labels: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
+        self, text: str | Picture, labels: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
     ) -> ClassifyResult[L]: ...
     @overload
     async def classify(
@@ -618,7 +626,7 @@ class AsyncDecisionMachine(_Base):
 
     @overload
     async def classify_tree(
-        self, text: str, tree: Tree, **opts: Unpack[CallOpts]
+        self, text: str | Picture, tree: Tree, **opts: Unpack[CallOpts]
     ) -> ClassifyTreeResult: ...
     @overload
     async def classify_tree(
@@ -631,7 +639,7 @@ class AsyncDecisionMachine(_Base):
 
     @overload
     async def rate(
-        self, text: str, scale: Sequence[L], **opts: Unpack[CallOpts]
+        self, text: str | Picture, scale: Sequence[L], **opts: Unpack[CallOpts]
     ) -> RateResult[L]: ...
     @overload
     async def rate(
@@ -643,10 +651,12 @@ class AsyncDecisionMachine(_Base):
         return await self._send(_prep_rate(text, scale, opts), opts)
 
     @overload
-    async def answer(self, text: str, questions: str, **opts: Unpack[CallOpts]) -> AnswerResult: ...
+    async def answer(
+        self, text: str | Picture, questions: str, **opts: Unpack[CallOpts]
+    ) -> AnswerResult: ...
     @overload
     async def answer(
-        self, text: str, questions: Sequence[str], **opts: Unpack[CallOpts]
+        self, text: str | Picture, questions: Sequence[str], **opts: Unpack[CallOpts]
     ) -> Results[AnswerResult]: ...
     @overload
     async def answer(
@@ -662,10 +672,12 @@ class AsyncDecisionMachine(_Base):
         return await self._send(_prep_answer(text, questions, opts), opts)
 
     @overload
-    async def extract(self, text: str, schema: type[T], **opts: Unpack[CallOpts]) -> T: ...
+    async def extract(
+        self, text: str | Picture, schema: type[T], **opts: Unpack[CallOpts]
+    ) -> T: ...
     @overload
     async def extract(
-        self, text: str, schema: Mapping[str, Any], **opts: Unpack[CallOpts]
+        self, text: str | Picture, schema: Mapping[str, Any], **opts: Unpack[CallOpts]
     ) -> dict[str, Any]: ...
     @overload
     async def extract(
@@ -682,7 +694,7 @@ class AsyncDecisionMachine(_Base):
 
     @overload
     async def entities(
-        self, text: str, types: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
+        self, text: str | Picture, types: Sequence[L] | Mapping[L, str], **opts: Unpack[CallOpts]
     ) -> Results[Entity[L]]: ...
     @overload
     async def entities(
@@ -695,7 +707,7 @@ class AsyncDecisionMachine(_Base):
 
     @overload
     async def verify(
-        self, text: str, field: str | Field, value: str | float, **opts: Unpack[CallOpts]
+        self, text: str | Picture, field: str | Field, value: str | float, **opts: Unpack[CallOpts]
     ) -> VerifyResult: ...
     @overload
     async def verify(

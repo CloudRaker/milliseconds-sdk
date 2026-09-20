@@ -69,3 +69,11 @@ def _check(image: str) -> str:
     if not body.startswith(_MAGIC):
         raise client_error(_NOT_IMAGE)
     return image
+
+
+def is_picture(value: Any) -> bool:
+    """Is this value an image passed where the text goes? Bytes, a path, or a `data:image/` string.
+    Bare base64 is not accepted here: it cannot be told apart from text."""
+    if isinstance(value, (bytes, bytearray, os.PathLike)):
+        return True
+    return isinstance(value, str) and value.lower().startswith("data:image/")

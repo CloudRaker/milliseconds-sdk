@@ -138,3 +138,44 @@ def test_an_unknown_detail_tier_is_refused(dm: DecisionMachine) -> None:
 def test_a_batch_of_texts_beside_an_image_is_refused(dm: DecisionMachine) -> None:
     with pytest.raises(InvalidRequestError, match="text or texts"):
         dm.classify(["one", "two"], LABELS, image=PNG_BASE64)
+
+
+# ---- the image as the input -----------------------------------------------
+
+
+def test_bytes_as_the_first_argument_are_the_image() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify(PNG_BYTES, LABELS, detail="low")
+    assert body_of(seen[0]) == {"labels": LABELS, "image": PNG_BASE64, "detail": "low"}
+
+
+def test_a_path_as_the_first_argument_is_the_image(tmp_path: Path) -> None:
+    path = tmp_path / "receipt.png"
+    path.write_bytes(PNG_BYTES)
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.yes_no(path, "This is a receipt.")
+    assert body_of(seen[0])["image"] == PNG_BASE64
+    assert "text" not in body_of(seen[0])
+
+
+def test_a_data_url_as_the_first_argument_is_the_image() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify(DATA_URL, LABELS)
+    assert body_of(seen[0]) == {"labels": LABELS, "image": DATA_URL}
+
+
+def test_an_image_input_and_image_keyword_together_are_refused() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm, pytest.raises(InvalidRequestError, match="One image per call"):
+        dm.classify(PNG_BYTES, LABELS, image=PNG_BYTES)
+    assert seen == []
+
+
+def test_bare_base64_as_the_first_argument_stays_text() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify(PNG_BASE64, LABELS)
+    assert body_of(seen[0]) == {"text": PNG_BASE64, "labels": LABELS}

@@ -44,8 +44,8 @@ class CallOpts(TypedDict, total=False):
 
     `image` sends one JPEG, PNG or WebP, at most 5 MB, beside the text or in place
     of it. `detail` picks the resolution and the billed image tokens: low 1,000,
-    medium 2,000, high 4,000. The generative capabilities bill a multiple of that,
-    and those multipliers are provisional.
+    medium 2,000, high 4,000. `answer` bills 1.5x that, `extract`, `entities` and
+    `verify` 2x. `extract` on an image accepts at most 5 fields.
     """
 
     timeout: float

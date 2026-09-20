@@ -7,7 +7,7 @@ import { dimmer, int, kv } from './print'
 import { parseSpec, UsageError } from './spec'
 
 // ponytail: bumped by hand beside package.json, like the SDK's user-agent.
-const VERSION = '0.2.0'
+const VERSION = '0.2.1'
 
 /** Everything the CLI touches outside itself. The tests pass their own. */
 export interface Io {

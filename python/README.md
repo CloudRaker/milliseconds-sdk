@@ -220,9 +220,11 @@ another format and an over-size image before the call.
 | `medium` (default) | 768 px | 2,000 |
 | `high` | 1024 px | 4,000 |
 
-The base64 never enters the character count. `answer`, `extract`, `entities` and `verify`
-generate on the image and bill a multiple of the tier above. **Those multipliers are
-provisional.**
+The base64 never enters the character count. `answer` bills 1.5x the tier above; `extract`,
+`entities` and `verify` bill 2x. Those three are generative passes for a handful of values off
+one document image, not for long-form. `extract` on an image accepts at most 5 fields per call
+(400 `image_schema_too_large`). For a long document, parse it to text first and use the text
+capabilities.
 
 An image result carries no coordinates. `AnswerResult.start` and `.end` are `None` on an
 image answer, because there is no text to index.

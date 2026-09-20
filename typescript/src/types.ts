@@ -34,8 +34,8 @@ export type Detail = 'low' | 'medium' | 'high'
  * One image per call, with optional text beside it.
  *
  * `detail` picks the resolution and the billed image tokens: low 1,000, medium 2,000,
- * high 4,000. The generative capabilities (answer, extract, entities, verify) bill a
- * multiple of that, and those multipliers are provisional.
+ * high 4,000. `answer` bills 1.5x that; `extract`, `entities` and `verify` bill 2x.
+ * `extract` on an image accepts at most 5 fields (400 `image_schema_too_large`).
  */
 export interface ImageOptions {
   image?: ImageInput

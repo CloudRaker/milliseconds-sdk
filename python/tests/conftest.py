@@ -134,7 +134,8 @@ def api(request: httpx.Request) -> httpx.Response:
     if "texts" in body:
         out: Any = {"results": [_one(capability, body, t) for t in body["texts"]]}
     else:
-        out = _one(capability, body, body["text"])
+        # An image call may carry no text at all.
+        out = _one(capability, body, body.get("text", ""))
     return httpx.Response(200, json=out, headers=ALL_HEADERS)
 
 

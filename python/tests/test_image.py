@@ -1,0 +1,197 @@
+"""One image per call: encoding, the 5 MB limit, the body shape and the boxes."""
+
+from __future__ import annotations
+
+import base64
+import json
+from pathlib import Path
+from typing import Any
+
+import httpx
+import pytest
+from conftest import ALL_HEADERS, KEY, api, async_client, recorder, sync_client
+
+from milliseconds import AnswerResult, DecisionMachine, Entity, InvalidRequestError
+
+PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE"
+    "hQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+PNG_BYTES = base64.b64decode(PNG_BASE64)
+DATA_URL = f"data:image/png;base64,{PNG_BASE64}"
+
+LABELS = {"receipt": "a till receipt", "invoice": "a supplier invoice"}
+
+
+def body_of(request: httpx.Request) -> dict[str, Any]:
+    return json.loads(request.content)
+
+
+def replying(payload: Any):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload, headers=ALL_HEADERS)
+
+    return handler
+
+
+# ---- the body -------------------------------------------------------------
+
+
+def test_bytes_become_base64_and_the_text_is_dropped() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify("", LABELS, image=PNG_BYTES, detail="low")
+    assert body_of(seen[0]) == {"labels": LABELS, "image": PNG_BASE64, "detail": "low"}
+
+
+def test_a_path_is_read_from_disk(tmp_path: Path) -> None:
+    path = tmp_path / "pixel.png"
+    path.write_bytes(PNG_BYTES)
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify("", LABELS, image=path)
+    assert body_of(seen[0])["image"] == PNG_BASE64
+
+
+def test_a_data_url_crosses_the_wire_unchanged() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify("", LABELS, image=DATA_URL)
+    assert body_of(seen[0])["image"] == DATA_URL
+
+
+def test_text_beside_the_image_is_kept() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify("the scan of a till receipt", LABELS, image=PNG_BASE64)
+    assert body_of(seen[0]) == {
+        "text": "the scan of a till receipt",
+        "labels": LABELS,
+        "image": PNG_BASE64,
+    }
+
+
+def test_every_capability_carries_the_image() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.yes_no("", "The document is a receipt.", image=PNG_BASE64)
+        dm.rate("", ["low", "high"], image=PNG_BASE64)
+        dm.answer("", "What is the total?", image=PNG_BASE64)
+        dm.entities("", ["person"], image=PNG_BASE64)
+        dm.verify("", "total", "9.99", image=PNG_BASE64)
+        dm.classify_tree("", {"billing": "money", "shipping": "parcels"}, image=PNG_BASE64)
+        dm.extract(
+            "", {"type": "object", "properties": {"total": {"type": "string"}}}, image=PNG_BASE64
+        )
+    assert len(seen) == 7
+    assert all(body_of(r)["image"] == PNG_BASE64 for r in seen)
+
+
+async def test_the_async_client_sends_the_same_body() -> None:
+    seen, record = recorder()
+    async with async_client(record) as dm:
+        await dm.classify("", LABELS, image=PNG_BYTES)
+    assert body_of(seen[0])["image"] == PNG_BASE64
+
+
+def test_the_transport_never_sees_image_or_detail() -> None:
+    seen, record = recorder()
+    with sync_client(record) as dm:
+        dm.classify("", LABELS, image=PNG_BYTES, detail="high", timeout=5.0)
+    assert seen[0].headers["authorization"] == f"Bearer {KEY}"
+    assert body_of(seen[0])["detail"] == "high"
+
+
+# ---- the refusals ---------------------------------------------------------
+
+
+def test_an_empty_text_without_an_image_is_still_refused(dm: DecisionMachine) -> None:
+    with pytest.raises(InvalidRequestError):
+        dm.classify("", LABELS)
+
+
+def test_a_url_is_refused(dm: DecisionMachine) -> None:
+    with pytest.raises(InvalidRequestError, match="never fetches a URL"):
+        dm.classify("", LABELS, image="https://example.com/receipt.jpg")
+
+
+def test_over_five_megabytes_is_refused_from_the_length(dm: DecisionMachine) -> None:
+    huge = "/9j/" + "A" * (-(-5 * 1024 * 1024 * 4 // 3))
+    with pytest.raises(InvalidRequestError, match="5 MB"):
+        dm.classify("", LABELS, image=huge)
+    with pytest.raises(InvalidRequestError, match="5 MB"):
+        dm.classify("", LABELS, image=b"\xff\xd8\xff" + b"\x00" * (5 * 1024 * 1024))
+
+
+def test_another_format_is_refused(dm: DecisionMachine) -> None:
+    with pytest.raises(InvalidRequestError, match="data:image/"):
+        dm.classify("", LABELS, image="data:image/gif;base64,R0lGODlh")
+    with pytest.raises(InvalidRequestError, match="data:image/"):
+        dm.classify("", LABELS, image=12)  # type: ignore[arg-type]
+
+
+def test_an_unknown_detail_tier_is_refused(dm: DecisionMachine) -> None:
+    with pytest.raises(InvalidRequestError, match="detail takes"):
+        dm.classify("", LABELS, image=PNG_BASE64, detail="ultra")  # type: ignore[typeddict-item]
+
+
+# ---- the boxes ------------------------------------------------------------
+
+
+def test_extract_joins_boxes_to_the_data() -> None:
+    boxes = {"total": [10, 20, 30, 40]}
+    handler = replying({"data": {"total": "9.99"}, "boxes": boxes})
+    with sync_client(handler) as dm:
+        data = dm.extract(
+            "",
+            {"type": "object", "properties": {"total": {"type": "string"}}},
+            image=PNG_BASE64,
+        )
+    assert data == {"total": "9.99", "boxes": boxes}
+
+
+def test_a_text_extract_carries_no_boxes(dm: DecisionMachine) -> None:
+    data = dm.extract("a receipt", {"type": "object", "properties": {"total": {"type": "string"}}})
+    assert data == {"total": None}
+
+
+def test_an_entity_and_an_answer_carry_a_bbox() -> None:
+    entities = replying(
+        {
+            "entities": [
+                {
+                    "type": "person",
+                    "text": "Ada",
+                    "probability": 0.9,
+                    "start": 0,
+                    "end": 3,
+                    "bbox": [1, 2, 3, 4],
+                }
+            ]
+        }
+    )
+    with sync_client(entities) as dm:
+        found: Any = dm.entities("", ["person"], image=PNG_BASE64)
+    first: Entity[str] = found[0]
+    assert first.bbox == [1, 2, 3, 4]
+
+    answered = replying(
+        {
+            "question": "What is the total?",
+            "answer": "9.99",
+            "probability": 0.9,
+            "start": None,
+            "end": None,
+            "bbox": [5, 6, 7, 8],
+        }
+    )
+    with sync_client(answered) as dm:
+        one: AnswerResult = dm.answer("", "What is the total?", image=PNG_BASE64)
+    assert one.bbox == [5, 6, 7, 8]
+    assert one.span is None
+
+
+def test_a_text_result_has_no_bbox(dm: DecisionMachine) -> None:
+    one = dm.answer("Apple announced it.", "Who announced the product?")
+    assert one.bbox is None
+    assert api is not None

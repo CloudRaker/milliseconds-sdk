@@ -5,6 +5,8 @@ import { DecisionMachine, isMillisecondsError, typed } from '../src/index'
 import type { MillisecondsError } from '../src/errors'
 import type {
   AnswerResult,
+  BBox,
+  Boxes,
   ClassifyResult,
   ClassifyTreeResult,
   Entity,
@@ -260,11 +262,13 @@ test('7.8 answer narrows the null case', async () => {
   ])
   expectTypeOf(who).toEqualTypeOf<AnswerResult<'Who announced the product?'>>()
   expectTypeOf(cost).toEqualTypeOf<AnswerResult<'How much does it cost?'>>()
+  // An answer over an image has no text to index, so the offsets are null beside it.
   if (who.answer !== null) {
-    expectTypeOf(who.start).toEqualTypeOf<number>()
-    expectTypeOf(who.end).toEqualTypeOf<number>()
-    article.slice(who.start, who.end)
+    expectTypeOf(who.start).toEqualTypeOf<number | null>()
+    expectTypeOf(who.end).toEqualTypeOf<number | null>()
+    expectTypeOf(who.bbox).toEqualTypeOf<BBox | null | undefined>()
   }
+  if (who.start !== null && who.end !== null) article.slice(who.start, who.end)
   expectTypeOf(cost.start).toEqualTypeOf<number | null>()
   // @ts-expect-error start is number | null before the check
   article.slice(cost.start, cost.end)
@@ -347,6 +351,24 @@ declare const topUp: () => void
 declare const fix: (apiMessage: string) => void
 declare const workerEnv: { MS_API_KEY: string; MILLISECONDS: { fetch: typeof globalThis.fetch } }
 
+test('the README image snippet compiles', async () => {
+  const dm = new DecisionMachine({ apiKey: 'sk-ms-x' })
+  const DOCUMENT_TYPES = { receipt: 'a till receipt', invoice: 'a supplier invoice' }
+  const RECEIPT = { type: 'object', properties: { total: { type: 'string' } } } as const
+  // `imageFile` is the Node subpath. Any bytes work the same.
+  const receipt = new Uint8Array([0xff, 0xd8, 0xff])
+
+  const kind = await dm.classify('', DOCUMENT_TYPES, { image: receipt })
+  expectTypeOf(kind.label).toEqualTypeOf<'receipt' | 'invoice'>()
+
+  const scanned = await dm.extract('the scan of a till receipt', RECEIPT, {
+    image: receipt,
+    detail: 'high',
+  })
+  expectTypeOf(scanned.boxes).toEqualTypeOf<Boxes | undefined>()
+  expectTypeOf(scanned.total).toEqualTypeOf<string | null>()
+})
+
 test('the README snippets compile', async () => {
   const eight = async (dm: DecisionMachine) => {
     const intent = await dm.classify(ticket, ['billing', 'shipping', 'account'])
@@ -366,7 +388,7 @@ test('the README snippets compile', async () => {
     expectTypeOf(tone.label).toEqualTypeOf<'Calm' | 'Annoyed' | 'Angry' | 'Threatening to leave'>()
 
     const [who] = await dm.answer(article, ['Who announced the product?'])
-    if (who.answer !== null) article.slice(who.start, who.end)
+    if (who.start !== null && who.end !== null) article.slice(who.start, who.end)
 
     const found = await dm.entities(article, {
       person: 'a human name',

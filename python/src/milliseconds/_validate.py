@@ -36,9 +36,15 @@ def api_key(key: str | None) -> str:
     return key
 
 
-def text_input(value: str | Sequence[str]) -> None:
-    """One text or a batch of 1 to 32, each at most 20,000 characters."""
+def text_input(value: str | Sequence[str], has_image: bool = False) -> None:
+    """One text or a batch of 1 to 32, each at most 20,000 characters.
+
+    An image call may carry no text at all, so `has_image` allows the empty string.
+    The body then holds `image` and no `text`.
+    """
     if isinstance(value, str):
+        if value == "" and has_image:
+            return
         _chars("text", value)
         return
     n = len(value)

@@ -10,6 +10,15 @@ export default defineConfig([
     clean: true,
   },
   {
+    // The Node-only helpers, on their own subpath. `imageFile` reads a file, so this
+    // entry may hold a node: specifier and the library entry may not.
+    entry: { node: 'src/node.ts' },
+    format: ['esm', 'cjs'],
+    platform: 'node',
+    dts: true,
+    clean: false,
+  },
+  {
     // The CLI. It must never be reachable from the library entry point, or a bundler
     // pulls node: specifiers into a browser build.
     entry: { cli: 'src/cli/index.ts' },

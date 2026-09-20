@@ -71,8 +71,9 @@ describe.skipIf(!KEY)('the live API', () => {
       expect(who.start).toBeNull()
       expect(who.end).toBeNull()
     } else {
+      // The text path always sets the offsets beside an answer. Only an image nulls them.
       expect(who.start).toBeTypeOf('number')
-      expect(TICKET.slice(who.start, who.end)).toBeTypeOf('string')
+      expect(TICKET.slice(who.start ?? 0, who.end ?? 0)).toBeTypeOf('string')
     }
   })
 

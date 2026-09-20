@@ -7,11 +7,11 @@ import os
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, ClassVar, NamedTuple, TypeVar, overload
+from typing import Any, ClassVar, NamedTuple, TypeVar, cast, overload
 
 import httpx
 
-from . import _transport, _validate
+from . import _image, _transport, _validate
 from ._errors import MillisecondsError, make_error
 from ._models import (
     AnswerResult,
@@ -109,12 +109,25 @@ def _listing(value: Sequence[str] | Mapping[str, str]) -> Any:
     return dict(value) if isinstance(value, Mapping) else list(value)
 
 
-def _input(text: str | Sequence[str]) -> tuple[dict[str, Any], int]:
-    """`Array.isArray(input)` picks `texts` over `text`. The reply follows the request."""
-    _validate.text_input(text)
+def _input(text: str | Sequence[str], opts: CallOpts) -> tuple[dict[str, Any], int]:
+    """`Array.isArray(input)` picks `texts` over `text`. The reply follows the request.
+
+    `image` and `detail` leave the call options here and join the body, so the
+    transport never sees them. An image with an empty text sends no `text` at all.
+    """
+    image: Any = opts.pop("image", None)
+    detail: Any = opts.pop("detail", None)
+    _validate.text_input(text, image is not None)
     if isinstance(text, str):
-        return {"text": text}, 0
-    return {"texts": list(text)}, 1
+        body: dict[str, Any] = {} if text == "" and image is not None else {"text": text}
+        depth = 0
+    else:
+        body, depth = {"texts": list(text)}, 1
+    if image is not None:
+        body["image"] = _image.encode(image)
+        if detail is not None:
+            body["detail"] = _image.detail(detail)
+    return body, depth
 
 
 def _prep_yes_no(
@@ -122,8 +135,9 @@ def _prep_yes_no(
     statements: str | Sequence[str],
     when_true: str | None,
     when_false: str | None,
+    opts: CallOpts,
 ) -> _Call:
-    body, depth = _input(text)
+    body, depth = _input(text, opts)
     _validate.statements("statements", statements)
     if isinstance(statements, str):
         body["statement"] = statements
@@ -137,28 +151,32 @@ def _prep_yes_no(
     return _Call("yes-no", body, depth, _yes_no)
 
 
-def _prep_classify(text: str | Sequence[str], labels: Sequence[str] | Mapping[str, str]) -> _Call:
-    body, depth = _input(text)
+def _prep_classify(
+    text: str | Sequence[str], labels: Sequence[str] | Mapping[str, str], opts: CallOpts
+) -> _Call:
+    body, depth = _input(text, opts)
     _validate.labels(labels)
     body["labels"] = _listing(labels)
     return _Call("classify", body, depth, _classify)
 
 
-def _prep_classify_tree(text: str | Sequence[str], tree: Tree) -> _Call:
-    body, depth = _input(text)
+def _prep_classify_tree(text: str | Sequence[str], tree: Tree, opts: CallOpts) -> _Call:
+    body, depth = _input(text, opts)
     body["tree"] = dict(tree)
     return _Call("classify-tree", body, depth, _tree)
 
 
-def _prep_rate(text: str | Sequence[str], scale: Sequence[str]) -> _Call:
-    body, depth = _input(text)
+def _prep_rate(text: str | Sequence[str], scale: Sequence[str], opts: CallOpts) -> _Call:
+    body, depth = _input(text, opts)
     _validate.scale(scale)
     body["scale"] = list(scale)
     return _Call("rate", body, depth, _rate)
 
 
-def _prep_answer(text: str | Sequence[str], questions: str | Sequence[str]) -> _Call:
-    body, depth = _input(text)
+def _prep_answer(
+    text: str | Sequence[str], questions: str | Sequence[str], opts: CallOpts
+) -> _Call:
+    body, depth = _input(text, opts)
     _validate.statements("questions", questions)
     if isinstance(questions, str):
         body["question"] = questions
@@ -168,27 +186,39 @@ def _prep_answer(text: str | Sequence[str], questions: str | Sequence[str]) -> _
     return _Call("answer", body, depth, _answer)
 
 
-def _prep_extract(text: str | Sequence[str], schema: Any) -> _Call:
-    body, depth = _input(text)
+def _prep_extract(text: str | Sequence[str], schema: Any, opts: CallOpts) -> _Call:
+    body, depth = _input(text, opts)
     json_schema, load = to_json_schema(schema)
     _validate.schema(json_schema)
     body["schema"] = json_schema
 
     def parse(b: Mapping[str, Any], _usage: Usage) -> Any:
-        return load(b["data"])
+        data: Any = load(b["data"])
+        boxes = b.get("boxes")
+        # An image extract also carries `boxes`. A dict result takes them; a dataclass
+        # or a pydantic model has no field for them, so they are dropped there.
+        if boxes and isinstance(data, dict):
+            merged = cast("dict[str, Any]", data)
+            merged["boxes"] = boxes
+            return merged
+        return data
 
     return _Call("extract", body, depth, parse)
 
 
-def _prep_entities(text: str | Sequence[str], types: Sequence[str] | Mapping[str, str]) -> _Call:
-    body, depth = _input(text)
+def _prep_entities(
+    text: str | Sequence[str], types: Sequence[str] | Mapping[str, str], opts: CallOpts
+) -> _Call:
+    body, depth = _input(text, opts)
     _validate.types(types)
     body["types"] = _listing(types)
     return _Call("entities", body, depth, _entity_list)
 
 
-def _prep_verify(text: str | Sequence[str], field: str | Field, value: str | float) -> _Call:
-    body, depth = _input(text)
+def _prep_verify(
+    text: str | Sequence[str], field: str | Field, value: str | float, opts: CallOpts
+) -> _Call:
+    body, depth = _input(text, opts)
     body["field"] = {"name": field} if isinstance(field, str) else dict(field)
     body["value"] = value
     return _Call("verify", body, depth, _verify)
@@ -342,7 +372,7 @@ class DecisionMachine(_Base):
         `when_true` and `when_false` sharpen the boundary. Statements share one
         inference call, so extra statements are nearly free.
         """
-        return self._send(_prep_yes_no(text, statements, when_true, when_false), opts)
+        return self._send(_prep_yes_no(text, statements, when_true, when_false, opts), opts)
 
     @overload
     def classify(
@@ -359,7 +389,7 @@ class DecisionMachine(_Base):
         Annotate the label constant (`Final[Mapping[Intent, str]]`) and the result
         carries `Intent`. Without the annotation you get `ClassifyResult[str]`.
         """
-        return self._send(_prep_classify(text, labels), opts)
+        return self._send(_prep_classify(text, labels, opts), opts)
 
     @overload
     def classify_tree(
@@ -377,7 +407,7 @@ class DecisionMachine(_Base):
         Each level re-sends the text, so the per-level `input_chars` do not sum to
         `usage.input_chars`, which counts one pass over the body.
         """
-        return self._send(_prep_classify_tree(text, tree), opts)
+        return self._send(_prep_classify_tree(text, tree, opts), opts)
 
     @overload
     def rate(self, text: str, scale: Sequence[L], **opts: Unpack[CallOpts]) -> RateResult[L]: ...
@@ -388,7 +418,7 @@ class DecisionMachine(_Base):
 
     def rate(self, text: Any, scale: Any, **opts: Unpack[CallOpts]) -> Any:
         """Place the text on an ordered scale. Route on `score`, never on `level`."""
-        return self._send(_prep_rate(text, scale), opts)
+        return self._send(_prep_rate(text, scale, opts), opts)
 
     @overload
     def answer(self, text: str, questions: str, **opts: Unpack[CallOpts]) -> AnswerResult: ...
@@ -411,7 +441,7 @@ class DecisionMachine(_Base):
         `answer` is None when nothing fits, and `start` and `end` are then None too.
         Read the pair through `.span`.
         """
-        return self._send(_prep_answer(text, questions), opts)
+        return self._send(_prep_answer(text, questions, opts), opts)
 
     @overload
     def extract(self, text: str, schema: type[T], **opts: Unpack[CallOpts]) -> T: ...
@@ -434,7 +464,7 @@ class DecisionMachine(_Base):
         Declare every field `| None`. A missing value is None, an array of objects
         is always `[]`, and an array of scalars arrives as strings.
         """
-        return self._send(_prep_extract(text, schema), opts)
+        return self._send(_prep_extract(text, schema, opts), opts)
 
     @overload
     def entities(
@@ -447,7 +477,7 @@ class DecisionMachine(_Base):
 
     def entities(self, text: Any, types: Any, **opts: Unpack[CallOpts]) -> Any:
         """Find every span matching each type, sorted by start."""
-        return self._send(_prep_entities(text, types), opts)
+        return self._send(_prep_entities(text, types, opts), opts)
 
     @overload
     def verify(
@@ -464,7 +494,7 @@ class DecisionMachine(_Base):
 
     def verify(self, text: Any, field: Any, value: Any, **opts: Unpack[CallOpts]) -> Any:
         """Check whether the text says `value` for `field`. A bare name is sent as {name}."""
-        return self._send(_prep_verify(text, field, value), opts)
+        return self._send(_prep_verify(text, field, value, opts), opts)
 
     def post(self, path: str, body: Mapping[str, Any], **opts: Unpack[CallOpts]) -> Any:
         """Escape hatch: your path, your body, the SDK's auth, retries and errors."""
@@ -579,7 +609,7 @@ class AsyncDecisionMachine(_Base):
         **opts: Unpack[CallOpts],
     ) -> Any:
         """Answer each statement with yes or no, and a probability."""
-        return await self._send(_prep_yes_no(text, statements, when_true, when_false), opts)
+        return await self._send(_prep_yes_no(text, statements, when_true, when_false, opts), opts)
 
     @overload
     async def classify(
@@ -592,7 +622,7 @@ class AsyncDecisionMachine(_Base):
 
     async def classify(self, text: Any, labels: Any, **opts: Unpack[CallOpts]) -> Any:
         """Pick one label and return the full distribution."""
-        return await self._send(_prep_classify(text, labels), opts)
+        return await self._send(_prep_classify(text, labels, opts), opts)
 
     @overload
     async def classify_tree(
@@ -605,7 +635,7 @@ class AsyncDecisionMachine(_Base):
 
     async def classify_tree(self, text: Any, tree: Tree, **opts: Unpack[CallOpts]) -> Any:
         """Run classify once per level, descending into the winner."""
-        return await self._send(_prep_classify_tree(text, tree), opts)
+        return await self._send(_prep_classify_tree(text, tree, opts), opts)
 
     @overload
     async def rate(
@@ -618,7 +648,7 @@ class AsyncDecisionMachine(_Base):
 
     async def rate(self, text: Any, scale: Any, **opts: Unpack[CallOpts]) -> Any:
         """Place the text on an ordered scale. Route on `score`, never on `level`."""
-        return await self._send(_prep_rate(text, scale), opts)
+        return await self._send(_prep_rate(text, scale, opts), opts)
 
     @overload
     async def answer(self, text: str, questions: str, **opts: Unpack[CallOpts]) -> AnswerResult: ...
@@ -637,7 +667,7 @@ class AsyncDecisionMachine(_Base):
 
     async def answer(self, text: Any, questions: Any, **opts: Unpack[CallOpts]) -> Any:
         """Quote the answer out of the text, with its offsets."""
-        return await self._send(_prep_answer(text, questions), opts)
+        return await self._send(_prep_answer(text, questions, opts), opts)
 
     @overload
     async def extract(self, text: str, schema: type[T], **opts: Unpack[CallOpts]) -> T: ...
@@ -656,7 +686,7 @@ class AsyncDecisionMachine(_Base):
 
     async def extract(self, text: Any, schema: Any, **opts: Unpack[CallOpts]) -> Any:
         """Fill a JSON Schema from the text. Declare every field `| None`."""
-        return await self._send(_prep_extract(text, schema), opts)
+        return await self._send(_prep_extract(text, schema, opts), opts)
 
     @overload
     async def entities(
@@ -669,7 +699,7 @@ class AsyncDecisionMachine(_Base):
 
     async def entities(self, text: Any, types: Any, **opts: Unpack[CallOpts]) -> Any:
         """Find every span matching each type, sorted by start."""
-        return await self._send(_prep_entities(text, types), opts)
+        return await self._send(_prep_entities(text, types, opts), opts)
 
     @overload
     async def verify(
@@ -686,7 +716,7 @@ class AsyncDecisionMachine(_Base):
 
     async def verify(self, text: Any, field: Any, value: Any, **opts: Unpack[CallOpts]) -> Any:
         """Check whether the text says `value` for `field`."""
-        return await self._send(_prep_verify(text, field, value), opts)
+        return await self._send(_prep_verify(text, field, value, opts), opts)
 
     async def post(self, path: str, body: Mapping[str, Any], **opts: Unpack[CallOpts]) -> Any:
         """Escape hatch: your path, your body, the SDK's auth, retries and errors."""

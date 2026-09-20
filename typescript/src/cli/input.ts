@@ -12,6 +12,8 @@ export interface Sources {
   /** All of stdin, read once and cached. */
   stdin: () => string
   stdinIsTty: boolean
+  /** `--image` is set, so the text is optional and a positional is never the text. */
+  hasImage?: boolean
 }
 
 export interface Resolved {
@@ -72,6 +74,8 @@ export function resolveInput(s: Sources): Resolved {
   const raw = explicit || !s.stdinIsTty ? s.stdin() : ''
   const trimmed = raw.trim()
   if (trimmed === '') {
+    // An image needs no text, and a positional beside one is a label, not the text.
+    if (s.hasImage === true) return { input: '', items }
     // An empty pipe, /dev/null or a terminal: the positional text is the source.
     if (explicit) throw new UsageError('stdin is empty. Send the text in, or pass -f <file>.')
     if (items.length === 0) throw new UsageError(NO_TEXT)

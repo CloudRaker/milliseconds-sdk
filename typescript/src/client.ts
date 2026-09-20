@@ -5,7 +5,7 @@ import type { CallOptions, ClientOptions, Decision, ErrorCode, RateLimit, Usage 
 
 // ponytail: bumped by hand beside package.json. A build-time define would be config for a
 // value that changes once per release.
-const VERSION = '0.1.2'
+const VERSION = '0.2.0'
 const USER_AGENT = `cloudraker-milliseconds-js/${VERSION}`
 
 const DEFAULT_BASE_URL = 'https://api.milliseconds.ai'
@@ -169,7 +169,8 @@ export class Client {
   /** `unwrap` maps the parsed body to the result. It follows the request, never the response. */
   protected call<R>(
     path: string,
-    body: unknown,
+    // A promise, when the body waits on a Blob's bytes.
+    body: unknown | Promise<unknown>,
     options: CallOptions | undefined,
     unwrap: (raw: unknown) => R,
   ): Decision<R> {
@@ -184,7 +185,7 @@ export class Client {
 
   private async send(
     path: string,
-    body: unknown,
+    body: unknown | Promise<unknown>,
     call: CallOptions,
   ): Promise<{ response: Response; raw: unknown }> {
     const url = `${this.baseUrl}${path}`
@@ -195,7 +196,7 @@ export class Client {
     const headers = new Headers({ 'content-type': 'application/json', 'user-agent': USER_AGENT })
     for (const [k, v] of Object.entries({ ...this.#headers, ...call.headers })) headers.set(k, v)
     headers.set('authorization', `Bearer ${this.#apiKey}`)
-    const init: RequestInit = { method: 'POST', headers, body: JSON.stringify(body) }
+    const init: RequestInit = { method: 'POST', headers, body: JSON.stringify(await body) }
     const started = Date.now()
 
     for (let attempt = 1; ; attempt++) {

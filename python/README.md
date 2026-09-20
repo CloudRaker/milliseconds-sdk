@@ -184,6 +184,53 @@ Four degradations are real, and no Python annotation can hide them:
 - an array of scalars comes back as a list of strings;
 - an enum is not checked on the server, so a value outside your `Literal` can arrive.
 
+## Images
+
+Every capability reads one image. Send the bytes: the API never fetches a URL.
+
+```python
+import base64
+
+# In your code: Path("receipt.png"), the bytes you already hold, or a data URL.
+receipt = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE"
+    "hQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+DOCUMENT_TYPES = {"receipt": "a till receipt", "invoice": "a supplier invoice"}
+RECEIPT = {"type": "object", "properties": {"total": {"type": "string"}}}
+
+# No text at all: pass an empty string.
+kind = dm.classify("", DOCUMENT_TYPES, image=receipt)
+kind.label
+
+# Text beside the image is read with it. `detail` picks the resolution.
+data = dm.extract("the scan of a till receipt", RECEIPT, image=receipt, detail="high")
+data.get("boxes")  # dotted field path -> [x1, y1, x2, y2], on an image call
+```
+
+`image` takes `bytes`, a `pathlib.Path`, a `data:image/(jpeg|png|webp);base64,` URL, or
+bare base64. One image per call, at most 5 MB, JPEG, PNG or WebP. The SDK refuses a URL,
+another format and an over-size image before the call.
+
+`detail` sets the longest edge and the billed image tokens.
+
+| detail | longest edge | image tokens |
+| --- | --- | --- |
+| `low` | 512 px | 1,000 |
+| `medium` (default) | 768 px | 2,000 |
+| `high` | 1024 px | 4,000 |
+
+The base64 never enters the character count. `answer`, `extract`, `entities` and `verify`
+generate on the image and bill a multiple of the tier above. **Those multipliers are
+provisional.**
+
+Boxes come back in the pixels of the image you uploaded, and they are `None` when the
+model returned none: `AnswerResult.bbox`, `Entity.bbox`, and a `boxes` key on the extract
+result, keyed by the dotted field path. The `boxes` key needs a `dict` schema: a
+dataclass, a `TypedDict` and a pydantic model hold no field for it, so it is dropped
+there. An image answer carries no `start` and `end`, because there is no text to index.
+
 ## Usage and rate limits
 
 Every result carries the usage of the call that produced it. A single-text `extract` and

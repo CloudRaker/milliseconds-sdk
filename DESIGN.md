@@ -59,7 +59,7 @@ OpenAPI document.
 
 | Source fact | File | Effect on the SDK |
 | --- | --- | --- |
-| `answer` returns `{answer, probability, start, end}` all set, or `answer`/`start`/`end` all `null` with `probability: 0`. Never mixed. | `decide.service.ts` `answer()` | `AnswerResult` is a discriminated union. |
+| `answer` returns `{answer, probability, start, end}` all set, or `answer`/`start`/`end` all `null` with `probability: 0`. Never mixed. On an image the answer carries `bbox` and null offsets. | `decide.service.ts` `answer()` | `AnswerResult` is a union, and `start`/`end` are `number \| null` beside an answer. |
 | `kindOf` maps **every** non-object array to kind `string[]`, and `coerce` runs `value.map(String)`. | `lib/json-schema.ts` | An array of numbers arrives as `string[]`. |
 | `coerce` returns `null` for a missing or empty value, for the whole field. | `lib/json-schema.ts` | A scalar array is `string[] \| null`. A null **element** never happens. |
 | An array of objects pushes a `ListPlan` with `fields: []`, and `assemble` writes `[]` unconditionally. | `lib/json-schema.ts` | An array of objects is `never[]`. Never null. |
@@ -104,6 +104,8 @@ milliseconds-sdk/
       errors.ts                 MillisecondsError, isMillisecondsError
       validate.ts               the client-side checks of section 8
       schema.ts                 runtime: any schema -> JSON Schema
+      image.ts                  one image: encode, 5 MB, JPEG/PNG/WebP, never a URL
+      node.ts                   the ./node subpath: imageFile(path)
       types.ts                  every public type and every inference helper
       cli/
         index.ts                #!/usr/bin/env node — parseArgs, dispatch, exit codes
@@ -115,6 +117,7 @@ milliseconds-sdk/
       types.test-d.ts           expectTypeOf: every claim in section 10
       client.test.ts            stubbed fetch: retries, usage, errors, body shape
       validate.test.ts          every row of section 8
+      image.test.ts             encoding, the limits, the body and the boxes
       cli.test.ts               argv in, body and stdout out
       live.test.ts              skipped unless MS_API_KEY is set
   python/

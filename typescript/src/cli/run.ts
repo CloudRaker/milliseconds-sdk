@@ -7,7 +7,7 @@ import { dimmer, int, kv } from './print'
 import { parseSpec, UsageError } from './spec'
 
 // ponytail: bumped by hand beside package.json, like the SDK's user-agent.
-const VERSION = '0.1.2'
+const VERSION = '0.2.0'
 
 /** Everything the CLI touches outside itself. The tests pass their own. */
 export interface Io {
@@ -147,6 +147,7 @@ async function dispatch(io: Io, found: { cap?: Capability }): Promise<number> {
     positionals: rest,
     stdin,
     stdinIsTty: io.stdinIsTty,
+    hasImage: v.image !== undefined,
   })
   if (source.note !== undefined) io.err(source.note)
   const spec = parseSpec(source.items, cap.described, stdin)

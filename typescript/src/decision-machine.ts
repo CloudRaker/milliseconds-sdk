@@ -1,9 +1,11 @@
 import { Client } from './client'
+import { encodeImage } from './image'
 import { toJsonSchema } from './schema'
 import { checkInput, checkList, checkSchema, checkSpec } from './validate'
 
 import type {
   AnswerResult,
+  Boxes,
   CallOptions,
   ClassifyResult,
   ClassifyTreeResult,
@@ -12,6 +14,7 @@ import type {
   ExtractSchema,
   Extracted,
   Fan,
+  ImageOptions,
   Input,
   LabelOf,
   Labels,
@@ -28,11 +31,37 @@ const MODEL = 'decision-machine-1'
 
 /** The batch shape follows the request, never the response. */
 const same = (raw: unknown) => raw
-const key = (name: 'results' | 'data' | 'entities') => (raw: unknown) =>
+const key = (name: 'results' | 'entities') => (raw: unknown) =>
   (raw as Record<string, unknown>)[name]
 
-/** `text` for one result, `texts` for a batch. The mutual exclusion is impossible here. */
-const inputBody = (input: Input) => (typeof input === 'string' ? { text: input } : { texts: input })
+/**
+ * `{ data }` is unwrapped. An image call also carries `boxes`, so it joins the object.
+ *
+ * A schema property named `boxes` would collide. Name it something else on an image.
+ */
+const extracted = (raw: unknown) => {
+  const body = raw as { data: object; boxes?: Boxes }
+  return body.boxes === undefined ? body.data : { ...body.data, boxes: body.boxes }
+}
+
+/**
+ * `text` for one result, `texts` for a batch. The mutual exclusion is impossible here.
+ *
+ * An empty string sends no text at all. Only an image call reaches this: `checkInput`
+ * refuses an empty text otherwise.
+ */
+const inputBody = (input: Input) =>
+  typeof input === 'string' ? (input === '' ? {} : { text: input }) : { texts: input }
+
+/** The body, plus the image when there is one. A Blob makes it a promise. */
+function withImage(body: object, options: ImageOptions | undefined): object | Promise<object> {
+  if (options?.image === undefined) return body
+  const detail = options.detail === undefined ? {} : { detail: options.detail }
+  const encoded = encodeImage(options.image)
+  return typeof encoded === 'string'
+    ? { ...body, ...detail, image: encoded }
+    : encoded.then((image) => ({ ...body, ...detail, image }))
+}
 
 /**
  * `decision-machine-1` at api.milliseconds.ai. Every capability is a pure function, so
@@ -49,7 +78,7 @@ export class DecisionMachine extends Client {
   yesNo<const T extends Input, const S extends string | readonly string[]>(
     input: T,
     statements: S,
-    options?: CallOptions & { when_true?: string; when_false?: string },
+    options?: CallOptions & ImageOptions & { when_true?: string; when_false?: string },
   ): Decision<
     Fan<
       T,
@@ -58,7 +87,7 @@ export class DecisionMachine extends Client {
         : YesNoResult<S & string>
     >
   > {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     checkSpec('statements', statements)
     const { when_true, when_false, ...call } = options ?? {}
     const body = {
@@ -69,7 +98,7 @@ export class DecisionMachine extends Client {
     }
     return this.capability(
       'yes-no',
-      body,
+      withImage(body, options),
       input,
       call,
       typeof statements === 'string' ? same : key('results'),
@@ -80,11 +109,17 @@ export class DecisionMachine extends Client {
   classify<const T extends Input, const L extends Labels>(
     input: T,
     labels: L,
-    options?: CallOptions,
+    options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, ClassifyResult<LabelOf<L>>>> {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     checkList('labels', labels, 2, 64, 'classify')
-    return this.capability('classify', { ...inputBody(input), labels }, input, options, same)
+    return this.capability(
+      'classify',
+      withImage({ ...inputBody(input), labels }, options),
+      input,
+      options,
+      same,
+    )
   }
 
   /**
@@ -96,29 +131,41 @@ export class DecisionMachine extends Client {
   classifyTree<const T extends Input, const N extends Tree>(
     input: T,
     tree: N,
-    options?: CallOptions,
+    options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, ClassifyTreeResult<TreeLabels<N>, LeafLabels<N>>>> {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     checkList('labels', tree, 2, 64, 'classify-tree', true)
-    return this.capability('classify-tree', { ...inputBody(input), tree }, input, options, same)
+    return this.capability(
+      'classify-tree',
+      withImage({ ...inputBody(input), tree }, options),
+      input,
+      options,
+      same,
+    )
   }
 
   /** Places the text on an ordered scale of described levels, low to high. */
   rate<const T extends Input, const S extends readonly string[]>(
     input: T,
     scale: S,
-    options?: CallOptions,
+    options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, RateResult<S>>> {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     checkList('scale', scale, 2, 10, 'rate')
-    return this.capability('rate', { ...inputBody(input), scale }, input, options, same)
+    return this.capability(
+      'rate',
+      withImage({ ...inputBody(input), scale }, options),
+      input,
+      options,
+      same,
+    )
   }
 
   /** Quotes the answer out of the text, with its offsets. `answer` is null when nothing fits. */
   answer<const T extends Input, const Q extends string | readonly string[]>(
     input: T,
     questions: Q,
-    options?: CallOptions,
+    options?: CallOptions & ImageOptions,
   ): Decision<
     Fan<
       T,
@@ -127,7 +174,7 @@ export class DecisionMachine extends Client {
         : AnswerResult<Q & string>
     >
   > {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     checkSpec('questions', questions)
     const body = {
       ...inputBody(input),
@@ -135,7 +182,7 @@ export class DecisionMachine extends Client {
     }
     return this.capability(
       'answer',
-      body,
+      withImage(body, options),
       input,
       options,
       typeof questions === 'string' ? same : key('results'),
@@ -149,17 +196,17 @@ export class DecisionMachine extends Client {
   extract<const T extends Input, const S extends ExtractSchema>(
     input: T,
     schema: S,
-    options?: CallOptions,
-  ): Decision<Fan<T, Extracted<SchemaOutput<S>>>> {
-    checkInput(input)
+    options?: CallOptions & ImageOptions,
+  ): Decision<Fan<T, Extracted<SchemaOutput<S>> & { boxes?: Boxes }>> {
+    checkInput(input, options?.image !== undefined)
     const json = toJsonSchema(schema)
     checkSchema(json)
     return this.capability(
       'extract',
-      { ...inputBody(input), schema: json },
+      withImage({ ...inputBody(input), schema: json }, options),
       input,
       options,
-      key('data'),
+      extracted,
     )
   }
 
@@ -167,13 +214,13 @@ export class DecisionMachine extends Client {
   entities<const T extends Input, const E extends Labels>(
     input: T,
     types: E,
-    options?: CallOptions,
+    options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, Entity<LabelOf<E>>[]>> {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     checkList('types', types, 1, 64, 'entities')
     return this.capability(
       'entities',
-      { ...inputBody(input), types },
+      withImage({ ...inputBody(input), types }, options),
       input,
       options,
       key('entities'),
@@ -185,21 +232,21 @@ export class DecisionMachine extends Client {
     input: T,
     field: string | { name: string; description?: string },
     value: string | number,
-    options?: CallOptions,
+    options?: CallOptions & ImageOptions,
   ): Decision<Fan<T, VerifyResult>> {
-    checkInput(input)
+    checkInput(input, options?.image !== undefined)
     const body = {
       ...inputBody(input),
       field: typeof field === 'string' ? { name: field } : field,
       value,
     }
-    return this.capability('verify', body, input, options, same)
+    return this.capability('verify', withImage(body, options), input, options, same)
   }
 
   /** `{ results }` is unwrapped for a batch, and the per-text envelope for one text. */
   private capability<R>(
     name: string,
-    body: object,
+    body: object | Promise<object>,
     input: Input,
     options: CallOptions | undefined,
     one: (raw: unknown) => unknown,

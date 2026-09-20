@@ -24,6 +24,31 @@ export interface ClientOptions {
   dangerouslyAllowBrowser?: boolean
 }
 
+/** One image: raw bytes, a Blob, a data URL, or bare base64. Never a URL. */
+export type ImageInput = Uint8Array | ArrayBuffer | Blob | string
+
+/** The longest edge the runner resizes to: 512, 768 or 1024 pixels. */
+export type Detail = 'low' | 'medium' | 'high'
+
+/**
+ * One image per call, with optional text beside it.
+ *
+ * `detail` picks the resolution and the billed image tokens: low 1,000, medium 2,000,
+ * high 4,000. The generative capabilities (answer, extract, entities, verify) bill a
+ * multiple of that, and those multipliers are provisional.
+ */
+export interface ImageOptions {
+  image?: ImageInput
+  /** Default 'medium'. */
+  detail?: Detail
+}
+
+/** [x1, y1, x2, y2], in the pixels of the image you uploaded. */
+export type BBox = [number, number, number, number]
+
+/** Dotted field path -> box. Empty when the model returned none. */
+export type Boxes = Record<string, BBox>
+
 export interface CallOptions {
   timeout?: number
   maxRetries?: number
@@ -190,10 +215,23 @@ export interface RateResult<S extends readonly string[] = readonly string[]> {
   scores: { -readonly [K in keyof S]: number }
 }
 
-/** The service sets answer, start and end together, or nulls all three. */
+/**
+ * The text path sets answer, start and end together, or nulls all three.
+ *
+ * On an image there is no text to index, so `start` and `end` are null beside an answer,
+ * and `bbox` holds the region in the pixels of the image you uploaded.
+ */
 export type AnswerResult<Q extends string = string> =
-  | { question: Q; answer: string; probability: number; start: number; end: number }
-  | { question: Q; answer: null; probability: number; start: null; end: null }
+  | {
+      question: Q
+      answer: string
+      probability: number
+      start: number | null
+      end: number | null
+      /** Absent on a text call: only an image answer carries a box. */
+      bbox?: BBox | null
+    }
+  | { question: Q; answer: null; probability: number; start: null; end: null; bbox?: null }
 
 export interface Entity<T extends string = string> {
   type: T
@@ -201,6 +239,8 @@ export interface Entity<T extends string = string> {
   probability: number
   start: number
   end: number
+  /** The region in the uploaded image. Absent on text, null when the model gave none. */
+  bbox?: BBox | null
 }
 
 export interface VerifyResult {

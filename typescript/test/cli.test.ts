@@ -688,3 +688,51 @@ describe('the list', () => {
     expect(calls).toHaveLength(0)
   })
 })
+
+// ---- images ---------------------------------------------------------------
+
+describe('--image', () => {
+  const PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+  const pngFile = () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'dm1-cli-')), 'pixel.png')
+    writeFileSync(path, Buffer.from(PNG_BASE64, 'base64'))
+    return path
+  }
+
+  test('sends the file as base64, and every positional stays a label', async () => {
+    const r = await cli(
+      ['classify', '--image', pngFile(), '--detail', 'low', 'receipt', 'invoice'],
+      {
+        replies: [classified('receipt')],
+      },
+    )
+    expect(r.code).toBe(0)
+    expect(r.body).toEqual({ labels: ['receipt', 'invoice'], detail: 'low', image: PNG_BASE64 })
+  })
+
+  test('a piped text joins the image', async () => {
+    const r = await cli(['classify', '--image', pngFile(), 'receipt', 'invoice'], {
+      stdin: 'the scan of a till receipt',
+      replies: [classified('receipt')],
+    })
+    expect(r.body).toEqual({
+      text: 'the scan of a till receipt',
+      labels: ['receipt', 'invoice'],
+      image: PNG_BASE64,
+    })
+  })
+
+  test('an unknown detail tier is a usage error', async () => {
+    const r = await cli(['classify', '--image', pngFile(), '--detail', 'ultra', 'a', 'b'])
+    expect(r.code).toBe(2)
+    expect(r.err).toContain('--detail takes low, medium, high')
+  })
+
+  test('a missing file is a usage error, not a request', async () => {
+    const r = await cli(['classify', '--image', '/no/such/file.png', 'a', 'b'])
+    expect(r.code).toBe(2)
+    expect(r.calls).toHaveLength(0)
+  })
+})

@@ -171,6 +171,56 @@ valibot and older zod, where the converter is a module function.
 An arktype schema passes straight in: `dm.extract(text, Invoice)`. The SDK calls its
 `toJsonSchema()` and reads the output type from `~standard`.
 
+## Images
+
+Every capability reads one image. Send the bytes: the API never fetches a URL.
+
+```ts
+import { imageFile } from '@cloudraker/milliseconds/node'
+
+// Or a Uint8Array, an ArrayBuffer, a Blob, a data URL, or bare base64.
+const receipt = imageFile('receipt.jpg')
+
+// No text at all: pass an empty first argument.
+const kind = await dm.classify('', DOCUMENT_TYPES, { image: receipt })
+
+// Text beside the image is read with it. `detail` picks the resolution.
+const scanned = await dm.extract('the scan of a till receipt', RECEIPT, {
+  image: receipt,
+  detail: 'high',
+})
+scanned.boxes?.total // [x1, y1, x2, y2] in the pixels you uploaded
+```
+
+`image` takes `Uint8Array`, `ArrayBuffer`, `Blob`, a `data:image/(jpeg|png|webp);base64,`
+URL, or bare base64. `imageFile(path)` reads a file in Node. One image per call, at most
+5 MB, JPEG, PNG or WebP. The SDK refuses a URL, another format and an over-size image
+before the call.
+
+`detail` sets the longest edge and the billed image tokens.
+
+| detail | longest edge | image tokens |
+| --- | --- | --- |
+| `low` | 512 px | 1,000 |
+| `medium` (default) | 768 px | 2,000 |
+| `high` | 1024 px | 4,000 |
+
+The base64 never enters the character count. `answer`, `extract`, `entities` and `verify`
+generate on the image and bill a multiple of the tier above. **Those multipliers are
+provisional.**
+
+Boxes come back in the pixels of the image you uploaded, and they are `null` when the
+model returned none: `bbox` on an answer, `bbox` on an entity, and `boxes` on the extract
+result, keyed by the dotted field path. An image answer carries no `start` and `end`,
+because there is no text to index.
+
+The CLI takes the same two flags:
+
+```sh
+dm1 classify --image receipt.jpg --detail low invoice receipt letter
+dm1 extract --image receipt.jpg --schema @receipt.json --json
+```
+
 ## Usage and rate limits
 
 ```ts

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
-from typing import Any, Generic, TypedDict, TypeVar, cast, get_origin
+from typing import Any, Generic, Literal, TypedDict, TypeVar, cast, get_origin
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired
@@ -17,6 +18,8 @@ T = TypeVar("T")
 
 __all__ = [
     "AnswerResult",
+    "BBox",
+    "Boxes",
     "CallOpts",
     "ClassifyResult",
     "ClassifyTreeLevel",
@@ -34,12 +37,31 @@ __all__ = [
 ]
 
 
+Detail = Literal["low", "medium", "high"]
+"""The longest edge the runner resizes to: 512, 768 or 1024 pixels."""
+
+BBox = Sequence[int]
+"""[x1, y1, x2, y2], in the pixels of the image you uploaded."""
+
+Boxes = Mapping[str, BBox]
+"""Dotted field path -> box. Empty when the model returned none."""
+
+
 class CallOpts(TypedDict, total=False):
-    """Per-call overrides. Every capability takes these as keyword arguments."""
+    """Per-call overrides. Every capability takes these as keyword arguments.
+
+    `image` sends one JPEG, PNG or WebP, at most 5 MB, beside the text or in place
+    of it. `detail` picks the resolution and the billed image tokens: low 1,000,
+    medium 2,000, high 4,000. The generative capabilities bill a multiple of that,
+    and those multipliers are provisional.
+    """
 
     timeout: float
     max_retries: int
     headers: Mapping[str, str]
+    #: One image: the bytes, a pathlib.Path, a data URL, or bare base64. Never a URL.
+    image: bytes | str | os.PathLike[str]
+    detail: Detail
 
 
 class Field(TypedDict):
@@ -147,6 +169,8 @@ class AnswerResult:
     start: int | None
     end: int | None
     usage: Usage = field(repr=False, compare=False)
+    #: The region in the uploaded image. None on text, and None when the model gave none.
+    bbox: BBox | None = None
 
     @property
     def span(self) -> tuple[int, int] | None:
@@ -167,6 +191,8 @@ class Entity(Generic[L]):
     probability: float
     start: int
     end: int
+    #: The region in the uploaded image. None on text, and None when the model gave none.
+    bbox: BBox | None = None
 
 
 @dataclass(frozen=True, slots=True)

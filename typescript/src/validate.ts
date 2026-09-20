@@ -34,10 +34,13 @@ export function checkRuntime(
  * An empty text is a 400, not the 200-with-empty-results trap. That trap needs `text` and
  * `texts` both absent, and the SDK always sends one of them. This check only replaces a
  * round trip with a local error.
+ *
+ * An image call may carry no text at all, so `hasImage` allows the empty string. The
+ * body then holds `image` and no `text`.
  */
-export function checkInput(input: Input): void {
+export function checkInput(input: Input, hasImage = false): void {
   if (typeof input === 'string') {
-    if (input === '') throw empty('text')
+    if (input === '' && !hasImage) throw empty('text')
     if (input.length > MAX_CHARS) throw tooLong('text', input.length)
     return
   }

@@ -1,7 +1,8 @@
+import { imageFile } from '../node'
 import { columns, int, kv, num, p3, scores, text, type Row } from './print'
 import { loadDocument, specSize, UsageError, type SpecList } from './spec'
 
-import type { Decision, DecisionMachine, JsonSchema, Tree } from '../index'
+import type { Decision, DecisionMachine, Detail, ImageOptions, JsonSchema, Tree } from '../index'
 
 /** The flags, for node:util parseArgs. */
 export const OPTIONS = {
@@ -28,6 +29,8 @@ export const OPTIONS = {
   value: { type: 'string' },
   'when-true': { type: 'string' },
   'when-false': { type: 'string' },
+  image: { type: 'string' },
+  detail: { type: 'string' },
 } as const
 
 /** Derived from OPTIONS, so a renamed flag breaks the build instead of reading undefined. */
@@ -88,6 +91,28 @@ function fieldOf(raw: string): string | { name: string; description: string } {
 
 const span = (r: Row) => (r.start === null ? '' : `${num(r, 'start')}-${num(r, 'end')}`)
 
+const DETAILS = ['low', 'medium', 'high']
+
+/**
+ * `--image <path>` and `--detail`, as the SDK options and as request-body keys. The two
+ * shapes are the same: `image` and `detail` are the wire names.
+ */
+function image(c: Call): ImageOptions {
+  if (c.v.detail !== undefined && !DETAILS.includes(c.v.detail))
+    throw new UsageError(`--detail takes ${DETAILS.join(', ')}, not ${c.v.detail}.`)
+  if (c.v.image === undefined) return {}
+  let encoded: string
+  try {
+    encoded = imageFile(c.v.image)
+  } catch (e) {
+    throw new UsageError(`cannot read ${c.v.image}: ${(e as Error).message}`)
+  }
+  return {
+    image: encoded,
+    ...(c.v.detail === undefined ? {} : { detail: c.v.detail as Detail }),
+  }
+}
+
 export const HELP = `dm1 — typed decisions over text, from milliseconds.ai
 
 USAGE
@@ -110,6 +135,13 @@ TEXT
   -f, --file <path>   Read the text from a file. Repeat it for a batch, in order.
   --lines <path>      One text per line. Sent in chunks of 32, in order.
   Piped input that starts with { becomes the whole request body. Flags still win.
+
+IMAGES
+  --image <path>      One JPEG, PNG or WebP, at most 5 MB. Every capability takes one.
+                      The positionals then stay list arguments, so send text beside the
+                      image with -f <file> or a pipe.
+  --detail <tier>     low (512 px), medium (768 px, default) or high (1024 px). It sets
+                      the resolution and the billed image tokens.
 
 SPECIFICATION
   A positional after the text is a label, statement, level, question or type.
@@ -154,6 +186,8 @@ EXAMPLES
   dm1 entities "Ada met Grace in Paris" person place --json | jq -r '.[].text'
   dm1 extract -f invoice.txt --schema @invoice.json
   dm1 classify --lines tickets.txt billing shipping account --jsonl > labelled.ndjson
+  dm1 classify --image receipt.jpg --detail low invoice receipt letter
+  dm1 extract --image receipt.jpg --schema @receipt.json --json
   pbpaste | dm1 classify @labels.json
 
   No key yet?  https://console.milliseconds.ai  then  export MS_API_KEY=sk-ms-...
@@ -203,8 +237,8 @@ export const CAPABILITIES: Record<string, Capability> = {
     dm1 classify --lines tickets.txt @labels.json --jsonl | jq -r '.label'
     cat ticket.txt | dm1 classify @labels.json --min 0.9 -q
 `,
-    call: (c) => c.dm.classify(c.input, c.list),
-    fragment: (c) => (specSize(c.list) > 0 ? { labels: c.list } : {}),
+    call: (c) => c.dm.classify(c.input, c.list, image(c)),
+    fragment: (c) => ({ ...(specSize(c.list) > 0 ? { labels: c.list } : {}), ...image(c) }),
     table: (r, dim) => {
       const o = asRow(r)
       return `${kv(
@@ -253,6 +287,7 @@ export const CAPABILITIES: Record<string, Capability> = {
 `,
     call: (c) =>
       c.dm.yesNo(c.input, list(c.list), {
+        ...image(c),
         ...(c.v['when-true'] === undefined ? {} : { when_true: c.v['when-true'] }),
         ...(c.v['when-false'] === undefined ? {} : { when_false: c.v['when-false'] }),
       }),
@@ -261,6 +296,7 @@ export const CAPABILITIES: Record<string, Capability> = {
       ...(specSize(c.list) > 0 ? { statements: list(c.list), statement: undefined } : {}),
       ...(c.v['when-true'] === undefined ? {} : { when_true: c.v['when-true'] }),
       ...(c.v['when-false'] === undefined ? {} : { when_false: c.v['when-false'] }),
+      ...image(c),
     }),
     table: (r) =>
       columns(
@@ -299,8 +335,8 @@ export const CAPABILITIES: Record<string, Capability> = {
     dm1 rate "I am done with this company." Calm Annoyed Angry "Threatening to leave"
     dm1 rate -f email.txt @scale.json --usage
 `,
-    call: (c) => c.dm.rate(c.input, list(c.list)),
-    fragment: (c) => (specSize(c.list) > 0 ? { scale: list(c.list) } : {}),
+    call: (c) => c.dm.rate(c.input, list(c.list), image(c)),
+    fragment: (c) => ({ ...(specSize(c.list) > 0 ? { scale: list(c.list) } : {}), ...image(c) }),
     table: (r, dim, names) => {
       const o = asRow(r)
       const scale = (o.scores as number[]).map(
@@ -347,10 +383,12 @@ export const CAPABILITIES: Record<string, Capability> = {
     dm1 answer -f press.txt "Who announced the product?" "How much does it cost?"
     curl -s https://example.com/press.txt | dm1 answer - "Who announced the product?"
 `,
-    call: (c) => c.dm.answer(c.input, list(c.list)),
+    call: (c) => c.dm.answer(c.input, list(c.list), image(c)),
     fragment: (c) =>
       // A piped body may carry `question`. Both keys at once is a 400, so the flag wins.
-      specSize(c.list) > 0 ? { questions: list(c.list), question: undefined } : {},
+      specSize(c.list) > 0
+        ? { questions: list(c.list), question: undefined, ...image(c) }
+        : { ...image(c) },
     table: (r) =>
       columns(
         asRows(r).map((o) => [
@@ -388,8 +426,8 @@ export const CAPABILITIES: Record<string, Capability> = {
     dm1 entities "Ada met Grace in Paris." person="a human name" place="a city or country"
     pbpaste | dm1 entities @types.json --json | jq -r '.[] | select(.type=="person") | .text'
 `,
-    call: (c) => c.dm.entities(c.input, c.list),
-    fragment: (c) => (specSize(c.list) > 0 ? { types: c.list } : {}),
+    call: (c) => c.dm.entities(c.input, c.list, image(c)),
+    fragment: (c) => ({ ...(specSize(c.list) > 0 ? { types: c.list } : {}), ...image(c) }),
     table: (r) =>
       columns(
         asRows(r).map((o) => [
@@ -435,9 +473,12 @@ export const CAPABILITIES: Record<string, Capability> = {
           need(c.v.schema, '--schema', 'dm1 extract -f invoice.txt --schema @invoice.json'),
           c.stdin,
         ) as JsonSchema,
+        image(c),
       ),
     fragment: (c) =>
-      c.v.schema === undefined ? {} : { schema: loadDocument('schema', c.v.schema, c.stdin) },
+      c.v.schema === undefined
+        ? { ...image(c) }
+        : { schema: loadDocument('schema', c.v.schema, c.stdin), ...image(c) },
     table: (r) =>
       columns(
         Object.entries(asRow(r)).map(([k, v]) => [
@@ -481,10 +522,12 @@ export const CAPABILITIES: Record<string, Capability> = {
         c.input,
         fieldOf(need(c.v.field, '--field', 'dm1 verify -f invoice.txt --field total --value 999')),
         need(c.v.value, '--value', 'dm1 verify -f invoice.txt --field total --value 999'),
+        image(c),
       ),
     fragment: (c) => ({
       ...(c.v.field === undefined ? {} : { field: fieldOf(c.v.field) }),
       ...(c.v.value === undefined ? {} : { value: c.v.value }),
+      ...image(c),
     }),
     table: (r, dim) => {
       const o = asRow(r)
@@ -536,9 +579,12 @@ export const CAPABILITIES: Record<string, Capability> = {
           need(c.v.tree, '--tree', 'dm1 classify-tree -f ticket.txt --tree @taxonomy.json'),
           c.stdin,
         ) as Tree,
+        image(c),
       ),
     fragment: (c) =>
-      c.v.tree === undefined ? {} : { tree: loadDocument('tree', c.v.tree, c.stdin) },
+      c.v.tree === undefined
+        ? { ...image(c) }
+        : { tree: loadDocument('tree', c.v.tree, c.stdin), ...image(c) },
     table: (r, dim) => {
       const o = asRow(r)
       const levels = o.levels as Row[]

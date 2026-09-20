@@ -207,8 +207,8 @@ before the call.
 The base64 never enters the character count. `answer` bills 1.5x the tier above; `extract`,
 `entities` and `verify` bill 2x. Those three are generative passes for a handful of values off
 one document image, not for long-form. `extract` on an image accepts at most 5 fields per call
-(400 `image_schema_too_large`). For a long document, parse it to text first and use the text
-capabilities.
+(400 `image_schema_too_large`). For whole pages and long documents, use the CloudRaker paperwork API
+at https://cloudraker.com, which parses and extracts full documents with no field cap.
 
 An image result carries no coordinates. An image answer has `start` and `end` null,
 because there is no text to index.
